@@ -27,7 +27,7 @@ module Ghwatch
         #{JSON.pretty_generate(previous_assessments)}
 
         Candidates:
-        #{JSON.pretty_generate(candidates)}
+        #{JSON.pretty_generate(candidates.map { |issue| compact_issue(issue) })}
       TEXT
     end
 
@@ -53,10 +53,10 @@ module Ghwatch
         waiting_for_human_test with precise instructions and what remains unverified.
 
         Current issue:
-        #{JSON.pretty_generate(issue)}
+        #{JSON.pretty_generate(compact_issue(issue))}
 
         Current pull request:
-        #{JSON.pretty_generate(pull_request)}
+        #{JSON.pretty_generate(compact_pull_request(pull_request))}
       TEXT
     end
 
@@ -77,10 +77,10 @@ module Ghwatch
         Pull request: #{task.pr_number}
 
         Issue snapshot:
-        #{JSON.pretty_generate(issue)}
+        #{JSON.pretty_generate(compact_issue(issue))}
 
         Pull request snapshot:
-        #{JSON.pretty_generate(pull_request)}
+        #{JSON.pretty_generate(compact_pull_request(pull_request))}
       TEXT
     end
 
@@ -94,11 +94,70 @@ module Ghwatch
         Pull request: #{task.pr_number || "none"}
 
         Issue snapshot:
-        #{JSON.pretty_generate(issue)}
+        #{JSON.pretty_generate(compact_issue(issue))}
 
         Pull request snapshot:
-        #{JSON.pretty_generate(pull_request)}
+        #{JSON.pretty_generate(compact_pull_request(pull_request))}
       TEXT
+    end
+
+    private
+
+    # GitHub payloads carry many URLs, ids, reactions and diff hunks that agents
+    # don't need; keep only what describes the discussion so prompts stay small.
+    def compact_issue(issue)
+      return issue unless issue.is_a?(Hash)
+
+      issue.slice("number", "title", "state", "url", "body", "updatedAt").merge(
+        "author" => login(issue["author"]),
+        "labels" => Array(issue["labels"]).map { |label| label["name"] },
+        "assignees" => Array(issue["assignees"]).map { |assignee| login(assignee) },
+        "comments" => compact_comments(issue["comments"])
+      ).compact
+    end
+
+    def compact_pull_request(pr)
+      return pr unless pr.is_a?(Hash)
+
+      pr.slice(
+        "number", "title", "state", "url", "isDraft", "body", "headRefName", "headRefOid", "baseRefName",
+        "updatedAt", "mergedAt", "mergeable", "reviewDecision"
+      ).merge(
+        "closingIssues" => Array(pr["closingIssuesReferences"]).map { |ref| ref["number"] },
+        "checks" => Array(pr["statusCheckRollup"]).map { |check| check.slice("name", "workflowName", "status", "conclusion") },
+        "reviews" => Array(pr["reviews"]).map do |review|
+          {"author" => login(review["author"]), "state" => review["state"], "submittedAt" => review["submittedAt"], "body" => review["body"]}
+        end,
+        "comments" => compact_comments(pr["comments"]),
+        "inlineComments" => Array(pr["inlineComments"]).map do |comment|
+          {
+            "id" => comment["id"],
+            "inReplyTo" => comment["in_reply_to_id"],
+            "author" => login(comment["user"]),
+            "path" => comment["path"],
+            "line" => comment["line"] || comment["original_line"],
+            "createdAt" => comment["created_at"],
+            "body" => comment["body"]
+          }.compact
+        end
+      ).compact
+    end
+
+    def compact_comments(comments)
+      return nil if comments.nil?
+
+      Array(comments).map do |comment|
+        {
+          "id" => comment["id"],
+          "author" => login(comment["user"] || comment["author"]),
+          "createdAt" => comment["created_at"] || comment["createdAt"],
+          "body" => comment["body"]
+        }.compact
+      end
+    end
+
+    def login(user)
+      user.is_a?(Hash) ? user["login"] : user
     end
   end
 end
