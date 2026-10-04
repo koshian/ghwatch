@@ -294,6 +294,12 @@ done
 Only implementation/rework states consume `max_workers`. A task that already has a PR and is
 waiting for review does not block another issue from starting.
 
+Each cycle discovers and processes existing PR tasks before triaging issues and running
+tasks without a PR. PR rework, review, merging and finalization take precedence over new
+issue implementation. Human waits and future retries are still respected, so a blocked PR
+does not prevent unrelated issues from progressing. Within each group, tasks retain their
+registration order. Priority does not bypass review, checks or required human verification.
+
 Failures and protocol no-ops get a persisted retry time. A task does not become permanently
 silent merely because a subprocess exited without producing the required ghwatch result.
 

@@ -30,9 +30,10 @@ module Ghwatch
         -> { reload_config_if_changed },
         -> { @task_engine.reconcile_all },
         -> { @review_intake.discover },
+        -> { @task_engine.run_due(scope: :pull_requests, stop_requested: -> { !@running }) },
         -> { @issue_triage.request_if_watched_issue_changed },
         -> { @issue_triage.run if @issue_triage.due? },
-        -> { @task_engine.run_due(stop_requested: -> { !@running }) }
+        -> { @task_engine.run_due(scope: :issues, stop_requested: -> { !@running }) }
       ]
       steps.each do |step|
         break unless @running

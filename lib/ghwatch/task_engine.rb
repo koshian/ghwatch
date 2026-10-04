@@ -17,8 +17,16 @@ module Ghwatch
       active_tasks.each { |task| reconcile(task) }
     end
 
-    def run_due(stop_requested: -> { false })
-      active_tasks.each do |task|
+    def run_due(stop_requested: -> { false }, scope: :all)
+      pull_request_tasks, issue_tasks = active_tasks.partition { |task| task.pr_number }
+      tasks = case scope
+      when :pull_requests then pull_request_tasks
+      when :issues then issue_tasks
+      when :all then pull_request_tasks + issue_tasks
+      else raise ArgumentError, "unknown task scope #{scope.inspect}"
+      end
+
+      tasks.each do |task|
         break if stop_requested.call
         next unless action_due?(task)
         if task.review_state? || task.state == "finalizing"
