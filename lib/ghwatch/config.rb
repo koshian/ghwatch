@@ -103,8 +103,21 @@ module Ghwatch
       github.fetch("merge_method", "squash")
     end
 
-    def human_language
-      github.fetch("human_language", "auto")
+    def human_language(environment: ENV)
+      configured = github.fetch("human_language", "auto")
+      return configured unless configured == "auto"
+
+      %w[LC_ALL LANGUAGE LC_MESSAGES LANG].each do |name|
+        environment.fetch(name, "").split(":").each do |locale|
+          locale = locale.strip.split(/[.@]/).first
+          return "en" if %w[C POSIX].include?(locale)
+          next unless locale&.match?(/\A[a-z]{2,3}(?:[_-][a-z0-9]+)*\z/i)
+
+          return locale.tr("_", "-")
+        end
+      end
+
+      "en"
     end
 
     def close_issue_after_merge?
@@ -162,6 +175,10 @@ module Ghwatch
     def validate!
       raise Error, "[project].max_workers must be positive" if max_workers < 1
       raise Error, "[project].candidate_limit must be positive" if candidate_limit < 1
+      language = github.fetch("human_language", "auto")
+      unless language.is_a?(String) && !language.strip.empty?
+        raise Error, "[github].human_language must be a non-empty language name, language tag, or auto"
+      end
 
       roles.each do |role|
         raise Error, "role #{role.name} must define at least one [[roles.#{role.name}.models]] entry" if role.models.empty?

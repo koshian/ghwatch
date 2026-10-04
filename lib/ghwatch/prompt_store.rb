@@ -20,7 +20,14 @@ module Ghwatch
     end
 
     def compose(role, context:)
-      [read(role), context, Result.contract_for(role)].join("\n\n---\n\n")
+      language_instruction = <<~TEXT
+        Write all human-facing GitHub text in #{@config.human_language}, including issue and
+        pull request titles, descriptions, comments, review feedback, questions, and test
+        requests. This language setting takes precedence over the language of this prompt
+        and the existing GitHub discussion. Keep code identifiers, machine-readable JSON
+        keys, and protocol status values unchanged.
+      TEXT
+      [read(role), context, Result.contract_for(role), language_instruction].join("\n\n---\n\n")
     end
 
     def eject(role, force: false)

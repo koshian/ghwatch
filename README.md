@@ -351,8 +351,17 @@ close_issue_after_merge = true
 require_green_checks = true
 ```
 
-`human_language = "auto"` tells prompts to follow the language already used by the issue or
-project.
+`human_language` controls human-facing GitHub text for every role, including PR titles
+and descriptions, review comments, questions, and test requests. Set it explicitly to
+`"ja"`, `"en"`, or a language name such as `"Japanese"` in `[github]`.
+
+The default, `"auto"` (also used when omitted), infers the language from the ghwatch
+process environment in this order: `LC_ALL`, `LANGUAGE`, `LC_MESSAGES`, `LANG`.
+Empty or unrecognized values are skipped; colon-separated preferences use the first
+recognized locale. For example, `ja_JP.UTF-8` becomes `ja-JP`. `C` / `POSIX` locales
+and environments without a recognizable locale use English (`en`). Explicit configuration
+takes precedence over the environment and the language of the existing discussion.
+Protocol keys and status values remain unchanged.
 
 ## Development
 

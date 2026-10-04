@@ -11,6 +11,7 @@ review_all_open_prs = true
 [github]
 auto_merge = true
 merge_method = "squash"
+# Use a language name/tag (e.g. "ja") or infer it from the process environment.
 human_language = "auto"
 close_issue_after_merge = true
 require_green_checks = true
