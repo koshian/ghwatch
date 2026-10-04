@@ -199,9 +199,10 @@ module Ghwatch
       JSON.parse(gh("api", path))
     end
 
+    # Avoids `--slurp`, which older gh releases lack; `--jq '.[]'` emits one
+    # compact JSON item per line across all pages.
     def gh_api_paginated(path)
-      pages = JSON.parse(gh("api", "--paginate", "--slurp", path))
-      pages.flatten
+      gh("api", "--paginate", "--jq", ".[]", path).each_line.reject { |line| line.strip.empty? }.map { |line| JSON.parse(line) }
     end
 
     def marker_for(kind)
