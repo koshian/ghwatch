@@ -113,6 +113,9 @@ module Ghwatch
         waiting_for_human_test is a proposal for reviewer validation: include the existing
         PR number and a complete question. ghwatch sends it to review before notifying
         anyone. Never merge the PR to make a pre-merge test possible.
+        While a person is being waited on, ghwatch removes ignored build outputs from the
+        task worktree, so human instructions must obtain or build the test subject
+        themselves rather than point at files there.
       TEXT
     end
 
@@ -170,6 +173,9 @@ module Ghwatch
         ghwatch posts this request on the source Issue and mentions its reporter; ask for
         results on that Issue. PR-only tasks use the PR conversation. Environment setup
         requests (waiting_for_human_input) continue to ask for a reply on the PR.
+        While a person is being waited on, ghwatch removes the review workspace and ignored
+        build outputs in the task worktree. Human instructions must use a CI/test-build link
+        or include the commands to build the test subject, not point at files there.
         When all required checks are verified and the change is acceptable,
         return merge rather than asking for redundant human testing.
       TEXT

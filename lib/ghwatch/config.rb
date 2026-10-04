@@ -95,6 +95,11 @@ module Ghwatch
       project.fetch("branch_prefix", "ghwatch/issue-")
     end
 
+    def human_wait_cleanup
+      command = project.fetch("human_wait_cleanup", "git clean -fdX")
+      command.strip.empty? ? nil : command
+    end
+
     def review_all_open_prs?
       project.fetch("review_all_open_prs", true)
     end
@@ -179,6 +184,7 @@ module Ghwatch
     def validate!
       raise Error, "[project].max_workers must be positive" if max_workers < 1
       raise Error, "[project].candidate_limit must be positive" if candidate_limit < 1
+      raise Error, "[project].human_wait_cleanup must be a string" unless project.fetch("human_wait_cleanup", "").is_a?(String)
       language = github.fetch("human_language", "auto")
       unless language.is_a?(String) && !language.strip.empty?
         raise Error, "[github].human_language must be a non-empty language name, language tag, or auto"

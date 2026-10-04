@@ -181,6 +181,15 @@ ghwatch/issue-123
 The worktree survives repeated agent invocations. After finalization, ghwatch removes the
 worktree, prunes Git worktree metadata, and removes the local task branch.
 
+While a task waits for a person (`waiting_for_human_input` or `waiting_for_human_test`),
+ghwatch frees disk space: it removes the review workspace and runs
+`project.human_wait_cleanup` in the task worktree, once per wait. The default,
+`git clean -fdX`, deletes only Git-ignored files such as build outputs; commits, tracked
+changes and other untracked files remain. Set it to `""` to keep everything, for example
+when people test a build from the task worktree, or to another shell command such as
+`cargo clean`. Existing waits are released on the next reconciliation. Agents are told
+that human test instructions must not depend on files in these workspaces.
+
 ## Roles and models
 
 Everything is configured per project in `.ghwatch/config.toml`.
@@ -358,8 +367,9 @@ purpose, observed errors, a copyable apt installation command and verification s
 The human provisions the environment and replies on the PR; ghwatch then resumes review
 so the reviewer performs the blocked checks itself. ghwatch does not install OS packages.
 
-Review workspaces survive retries, CI waits and human waits. ghwatch removes them after
-confirming merge or closure, including externally merged/closed PRs during reconciliation.
+Review workspaces survive retries and CI waits. ghwatch removes them when the task starts
+waiting for a person, and after confirming merge or closure, including externally
+merged/closed PRs during reconciliation. The next review recreates the workspace.
 Unowned directories, attached branches and tracked source changes are refused rather than
 overwritten or deleted. Generated build outputs may be removed with the owned workspace;
 publish evidence elsewhere if it must remain available after the PR closes. A PR changed
@@ -428,6 +438,7 @@ retry_after = "10m"
 max_workers = 2
 candidate_limit = 20
 worktree_root = ".worktrees"
+human_wait_cleanup = "git clean -fdX"
 branch_prefix = "ghwatch/issue-"
 review_all_open_prs = true
 

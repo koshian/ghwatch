@@ -108,6 +108,7 @@ module Ghwatch
       return if return_conflicting_pr_to_worker(task, pull_request)
 
       resume_after_human_reply(task) if task.waiting_for_human? && @human_channel.reply_received?(task)
+      release_for_human_wait(task) if task.waiting_for_human?
       resume_review_after_rework_reply(task, pull_request)
       schedule_review_when_needed(task, snapshot)
 
@@ -189,6 +190,12 @@ module Ghwatch
       task.human_marker = nil
       task.metadata.delete("human_conversation_number")
       task.transition_to(resume_state, retry_at: Time.now.to_i)
+    end
+
+    def release_for_human_wait(task)
+      @worktrees&.release_for_human_wait(task)
+    rescue => e
+      @log.warn("[#{task.id}] could not release workspaces during human wait: #{e.message}")
     end
 
     def resume_review_after_rework_reply(task, pull_request)

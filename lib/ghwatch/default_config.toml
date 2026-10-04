@@ -5,6 +5,8 @@ retry_after = "10m"
 max_workers = 2
 candidate_limit = 20
 worktree_root = ".worktrees"
+# Run in the task worktree when it starts waiting for a person; "" disables it.
+human_wait_cleanup = "git clean -fdX"
 branch_prefix = "ghwatch/issue-"
 review_all_open_prs = true
 

@@ -103,6 +103,25 @@ module Ghwatch
       task.metadata.delete("review_worktree")
     end
 
+    # Frees disk while a person is expected to respond. The review workspace is
+    # recreated by the next review; the task worktree keeps its source and commits.
+    def release_for_human_wait(task)
+      cleanup_review(task)
+      return if task.metadata["human_wait_cleanup_marker"] == task.human_marker
+
+      command = @config.human_wait_cleanup
+      path = task.worktree && Pathname(task.worktree)
+      if command && path && inside_worktree_root?(path) && registered_worktree?(path)
+        result = @command.run("sh", "-c", command, chdir: path, timeout: 600)
+        if result.success?
+          @log.info("[#{task.id}] released build outputs in #{path} while waiting for a person")
+        else
+          @log.warn("[#{task.id}] human wait cleanup failed in #{path}: #{result.text.strip}")
+        end
+      end
+      task.metadata["human_wait_cleanup_marker"] = task.human_marker
+    end
+
     def prepare_pull_request(task, pull_request, state:)
       raise "cannot prepare a PR without its head repository" unless pull_request.dig("headRepository", "nameWithOwner")
 
@@ -141,6 +160,11 @@ module Ghwatch
     def verify_review_workspace(path)
       raise "review workspace is on a branch: #{path}" if git_result("-C", path.to_s, "symbolic-ref", "--quiet", "HEAD").success?
       raise "review workspace has tracked changes: #{path}" unless git("-C", path.to_s, "status", "--porcelain", "--untracked-files=no").strip.empty?
+    end
+
+    def inside_worktree_root?(path)
+      root = @project.root.join(@config.worktree_root).expand_path
+      path.expand_path.to_s.start_with?("#{root}/")
     end
 
     def fetch_default_branch

@@ -282,6 +282,31 @@ class PrWorkTest < Minitest::Test
     refute task.retry_due?
   end
 
+  def test_reconcile_releases_workspaces_only_for_human_waits_and_tolerates_failures
+    waiting = Ghwatch::Task.for_pr(164)
+    waiting.state = "waiting_for_human_test"
+    waiting.human_marker = "marker"
+    reviewing = Ghwatch::Task.for_pr(170)
+    released = []
+    worktrees = Object.new
+    worktrees.define_singleton_method(:release_for_human_wait) do |task|
+      released << task.id
+      raise "review workspace has tracked changes"
+    end
+    log = StringIO.new
+    machine = Ghwatch::TaskEngine.new(
+      state: State.new([waiting, reviewing]), github: Github.new([pr(164), pr(170)]),
+      worker_action: nil, reviewer_action: nil, finalizer_action: nil,
+      human_channel: Object.new.tap { |channel| def channel.reply_received?(task) = false },
+      config: OpenStruct.new(retry_after: 60), worktrees: worktrees, log: Ghwatch::Log.new(log)
+    )
+    machine.reconcile_all
+    assert_equal ["pr-164"], released
+    assert_equal "waiting_for_human_test", waiting.state
+    assert_nil waiting.last_error
+    assert_includes log.string, "could not release workspaces"
+  end
+
   def test_next_retry_excludes_human_waits_and_completed_tasks
     waiting = Ghwatch::Task.for_pr(164)
     waiting.state = "waiting_for_human_input"

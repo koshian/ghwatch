@@ -32,7 +32,7 @@ class PrWorktreeTest < Minitest::Test
     def @state.save_task(task) = task
     @manager = Ghwatch::WorktreeManager.new(
       project: Ghwatch::Project.new(root: @root, git_dir: @root.join(".git")),
-      config: OpenStruct.new(worktree_root: ".worktrees"), github: nil,
+      config: OpenStruct.new(worktree_root: ".worktrees", human_wait_cleanup: "git clean -fdX"), github: nil,
       command: @command, log: Ghwatch::Log.new(StringIO.new)
     )
   end
@@ -112,6 +112,50 @@ class PrWorktreeTest < Minitest::Test
     assert_raises(RuntimeError) { @manager.prepare_review(@task, @pr, state: @state) }
     assert_raises(RuntimeError) { @manager.cleanup_review(@task) }
     assert_equal "unexpected source edit\n", path.join("file.txt").read
+  end
+
+  def test_human_wait_removes_review_workspace_and_ignored_outputs_once
+    @root.join(".git/info/exclude").write("target/\n")
+    @manager.prepare_pull_request(@task, @pr, state: @state)
+    worker_path = Pathname(@task.worktree)
+    review_path = Pathname(@manager.prepare_review(@task, @pr, state: @state))
+    worker_path.join("target").mkpath
+    worker_path.join("target/app").write("binary\n")
+    worker_path.join("file.txt").write("unfinished repair\n")
+    worker_path.join("notes.txt").write("untracked\n")
+    @task.human_marker = "first"
+
+    @manager.release_for_human_wait(@task)
+    refute review_path.exist?
+    refute @task.metadata.key?("review_worktree")
+    refute worker_path.join("target").exist?
+    assert_equal "unfinished repair\n", worker_path.join("file.txt").read
+    assert_equal "untracked\n", worker_path.join("notes.txt").read
+
+    worker_path.join("target").mkpath
+    @manager.release_for_human_wait(@task)
+    assert worker_path.join("target").exist?
+    @task.human_marker = "second"
+    @manager.release_for_human_wait(@task)
+    refute worker_path.join("target").exist?
+  end
+
+  def test_human_wait_cleanup_can_be_disabled_and_never_runs_outside_worktrees
+    @root.join(".git/info/exclude").write("target/\n")
+    @root.join("target").mkpath
+    @task.worktree = @root.to_s
+    @task.human_marker = "marker"
+    @manager.release_for_human_wait(@task)
+    assert @root.join("target").exist?
+
+    @task.worktree = nil
+    @task.metadata.clear
+    @manager.prepare_pull_request(@task, @pr, state: @state)
+    worker_path = Pathname(@task.worktree)
+    worker_path.join("target").mkpath
+    @manager.instance_variable_get(:@config).human_wait_cleanup = nil
+    @manager.release_for_human_wait(@task)
+    assert worker_path.join("target").exist?
   end
 
   def test_review_workspace_rejects_a_stale_snapshot
