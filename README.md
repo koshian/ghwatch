@@ -325,6 +325,12 @@ such as Xvfb; they cannot edit source, commit, push or merge. Review feedback mu
 the tested SHA, commands, observations and evidence paths. Human requests are limited to
 checks the reviewer cannot perform, and direct replies to the PR.
 
+Missing development-environment packages use reviewer `waiting_for_human_input` rather
+than worker rework or human testing. The PR request lists verified package names, their
+purpose, observed errors, a copyable apt installation command and verification steps.
+The human provisions the environment and replies on the PR; ghwatch then resumes review
+so the reviewer performs the blocked checks itself. ghwatch does not install OS packages.
+
 Review workspaces survive retries, CI waits and human waits. ghwatch removes them after
 confirming merge or closure, including externally merged/closed PRs during reconciliation.
 Unowned directories, attached branches and tracked source changes are refused rather than

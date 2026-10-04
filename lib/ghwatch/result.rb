@@ -119,14 +119,15 @@ module Ghwatch
     def reviewer_contract(role)
       deep_option = (role.to_s == "reviewer") ? "|deep_review" : ""
       <<~TEXT
-        This is a read-only review role. Do not edit files, create commits, push branches,
+        This is a review role. You may build and run verification in the prepared workspace,
+        creating build outputs, logs and screenshots. Do not edit source, create commits, push branches,
         create worktrees, or merge the pull request yourself. Return the decision to ghwatch.
 
         Finish with exactly one result:
 
         #{START_MARKER}
         {
-          "status": "merge|changes_requested|waiting_for_human_test|comment#{deep_option}|retry",
+          "status": "merge|changes_requested|waiting_for_human_input|waiting_for_human_test|comment#{deep_option}|retry",
           "body": "concise human-facing review/comment",
           "issue": 123,
           "test_preparation": {
@@ -145,12 +146,23 @@ module Ghwatch
         waiting_for_human_test must contain precise test instructions in body and identify
         the related issue when known. comment is non-blocking and does not authorize merge.
 
+        For development-environment blockers such as missing OS packages, use
+        waiting_for_human_input, not changes_requested or waiting_for_human_test. In body,
+        list the exact apt package names for the detected Debian/Ubuntu system, explain
+        what each supplies and the observed failure, and provide a copyable
+        sudo apt install command for the human to run. Check project instructions and
+        available package metadata; do not confuse an executable name with a package name
+        or claim unverified dependencies are required. On other systems give the appropriate
+        package-manager instructions. Do not install system packages yourself. Include
+        post-install verification commands and ask the human to reply on this PR once ready;
+        ghwatch will resume the review and the reviewer will rerun the blocked checks.
+
         Before waiting_for_human_test, check the project's development and verification
         instructions and verify the preparation evidence for the current PR commit.
-        If autonomous checks or test-subject preparation are incomplete, return
-        changes_requested with concrete preparation tasks for the worker, even if no
-        source changes are needed. Do not perform the preparation yourself or waive a
-        project requirement. Only request checks that actually require a person.
+        Run available autonomous checks and preparation yourself. Use changes_requested
+        for defects or test preparation that requires implementation changes, and
+        waiting_for_human_input for environment setup requiring human intervention.
+        Do not waive a project requirement. Only request checks that actually require a person.
         For waiting_for_human_test, include test_preparation and make body a self-contained
         request with the tested commit, what was verified, what remains, how to obtain and
         start the test subject, and steps with expected results. Explain when no artifact

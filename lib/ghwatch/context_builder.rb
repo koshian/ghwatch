@@ -84,6 +84,11 @@ module Ghwatch
         Use changes_requested for defects or missing test infrastructure that needs code changes.
         Request human testing only for specific checks you cannot perform in this environment;
         explain what you tried and the remaining limitation. Direct replies to this PR.
+        Missing system packages are environment blockers: return waiting_for_human_input
+        with the exact apt package names, their purpose, observed errors, a copyable install
+        command and verification steps. Ask a human to provision the environment and reply
+        on this PR; rerun the checks yourself afterward. Do not send package installation
+        to the worker as changes_requested or ask the human to perform the GUI review.
         Check correctness, regressions, error handling, concurrency/resources where relevant,
         maintainability, test coverage, and whether the implementation actually satisfies the
         issue. If project policy requires human verification, do not authorize merge until that

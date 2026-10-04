@@ -95,9 +95,10 @@ module Ghwatch
           task.last_review_signature = refreshed_review_signature(task, fallback: initial_signature)
           task.state = "changes_requested"
           task.retry_at = Time.now.to_i
-        when "waiting_for_human_test"
+        when "waiting_for_human_input", "waiting_for_human_test"
           task.last_review_signature = initial_signature
-          wait_for_human(task, data.fetch("body"), outcome, kind: "human-test", resume_state: "waiting_for_review", target: :pull_request)
+          kind = (data["status"] == "waiting_for_human_input") ? "human-question" : "human-test"
+          wait_for_human(task, data.fetch("body"), outcome, kind: kind, resume_state: "waiting_for_review", target: :pull_request)
         when "comment"
           post_review_body(task, data.fetch("body"), outcome, kind: "review-comment")
           task.last_review_signature = refreshed_review_signature(task, fallback: initial_signature)

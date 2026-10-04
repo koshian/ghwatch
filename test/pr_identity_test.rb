@@ -153,6 +153,29 @@ class PrIdentityTest < Minitest::Test
     assert_empty @github.comments
   end
 
+  def test_reviewer_environment_request_waits_on_the_pr_and_reply_resumes_review
+    create_pr
+    @task.pr_number = 164
+    triage = Object.new
+    def triage.request! = nil
+    reviewer = Ghwatch::Actions::Reviewer.new(**action_options.merge(issue_triage: triage))
+    body = "Install fontconfig and fonts-dejavu-core: sudo apt install fontconfig fonts-dejavu-core. Verify with fc-match, then reply on this PR."
+    reviewer.send(:apply_result, @task, @github.pr, OpenStruct.new(
+      data: {"status" => "waiting_for_human_input", "body" => body}, signature: "reviewer"
+    ))
+    assert_equal "waiting_for_human_input", @task.state
+    assert_equal 164, @task.metadata["human_conversation_number"]
+    assert_equal "waiting_for_review", @task.metadata["resume_state"]
+    assert_nil @task.retry_at
+    assert_equal [[:pr, 164, body]], @github.comments
+    @engine.run_due
+    assert_empty @reviewer.calls
+    @engine.reconcile_all
+    assert_equal "waiting_for_review", @task.state
+    @engine.run_due
+    assert_equal [164], @reviewer.calls
+  end
+
   def test_reconciliation_recovers_a_review_wait_without_a_retry_or_a_pr
     @task.transition_to("waiting_for_review")
     @engine.reconcile_all
