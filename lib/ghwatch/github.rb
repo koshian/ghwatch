@@ -57,11 +57,33 @@ module Ghwatch
       gh_json(
         "pr", "view", number.to_s,
         "--json", "number,title,body,state,url,isDraft,headRefName,headRefOid,baseRefName,updatedAt,mergedAt," \
-                  "mergeable,statusCheckRollup,reviewDecision,reviews,closingIssuesReferences"
+                  "mergeable,statusCheckRollup,reviewDecision,reviews"
       ).merge(
+        "closingIssuesReferences" => closing_issues_references(number),
         "comments" => issue_comments(number),
         "inlineComments" => gh_api_paginated("repos/#{repo_name}/pulls/#{number}/comments?per_page=100")
       )
+    end
+
+    # Fetched via GraphQL because `gh pr view --json closingIssuesReferences`
+    # is not available in older gh releases (e.g. Debian's 2.46.0).
+    def closing_issues_references(number)
+      owner, name = repo_name.split("/", 2)
+      query = <<~GRAPHQL
+        query($owner: String!, $name: String!, $number: Int!) {
+          repository(owner: $owner, name: $name) {
+            pullRequest(number: $number) {
+              closingIssuesReferences(first: 10) { nodes { number url } }
+            }
+          }
+        }
+      GRAPHQL
+      data = gh_json(
+        "api", "graphql",
+        "-f", "owner=#{owner}", "-f", "name=#{name}", "-F", "number=#{number}",
+        "-f", "query=#{query}"
+      )
+      Array(data.dig("data", "repository", "pullRequest", "closingIssuesReferences", "nodes"))
     end
 
     def pull_request_for_branch(branch)
