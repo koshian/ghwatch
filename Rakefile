@@ -12,7 +12,11 @@ namespace :install do
   desc "Build and install #{Bundler::GemHelper.gemspec.full_name}.gem into the RubyGems user directory (no root needed)"
   task user: :build do
     gem_path = File.join("pkg", "#{Bundler::GemHelper.gemspec.full_name}.gem")
-    sh "gem", "install", "--user-install", "--local", "--no-document", gem_path
+    # Under `bundle exec`, GEM_HOME points at the bundle, which would make
+    # RubyGems treat runtime dependencies as already installed and skip them.
+    Bundler.with_unbundled_env do
+      sh "gem", "install", "--user-install", "--no-document", gem_path
+    end
   end
 end
 
