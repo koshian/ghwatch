@@ -1,0 +1,66 @@
+# frozen_string_literal: true
+
+module Ghwatch
+  module Runners
+    class Base
+      Invocation = Data.define(:runner, :model, :command_result, :error_kind) do
+        def success?
+          command_result.success? && error_kind.nil?
+        end
+
+        def output
+          command_result.stdout
+        end
+
+        def diagnostics
+          command_result.text
+        end
+
+        def signature
+          "#{runner}:#{model}"
+        end
+      end
+
+      def initialize(settings:, command:, log: Log.new)
+        @settings = settings
+        @command = command
+        @log = log
+      end
+
+      def run(model:, prompt:, cwd:, extra_args: [])
+        argv = build_argv(model: model, prompt: prompt, extra_args: extra_args)
+        timeout = Duration.seconds(@settings.fetch("timeout", "90m"))
+        result = @command.run(*argv, chdir: cwd, timeout: timeout)
+        error_kind = classify(result)
+
+        Invocation.new(
+          runner: runner_name,
+          model: model,
+          command_result: result,
+          error_kind: error_kind
+        )
+      end
+
+      def executable
+        @settings.fetch("command")
+      end
+
+      private
+
+      def classify(result)
+        return "timeout" if result.timed_out
+
+        text = result.text.downcase
+        return "quota" if ["usage limit", "usage limits", "quota", "no weighted tokens left", "no tokens left"].any? { |pattern| text.include?(pattern) }
+        return "capacity" if capacity_patterns.any? { |pattern| text.include?(pattern.downcase) }
+        return nil if result.success?
+
+        "command"
+      end
+
+      def capacity_patterns
+        Array(@settings.fetch("capacity_patterns", []))
+      end
+    end
+  end
+end

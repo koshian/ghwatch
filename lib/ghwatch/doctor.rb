@@ -1,0 +1,43 @@
+# frozen_string_literal: true
+
+module Ghwatch
+  class Doctor
+    Check = Data.define(:ok, :name, :detail)
+
+    def initialize(project:, config:, command:, github:)
+      @project = project
+      @config = config
+      @command = command
+      @github = github
+    end
+
+    def checks
+      [
+        Check.new(ok: true, name: "git repository", detail: @project.root.to_s),
+        Check.new(ok: File.exist?(@project.config_path), name: "config", detail: @project.config_path.to_s),
+        Check.new(ok: @command.executable?("gh"), name: "gh executable", detail: "gh"),
+        Check.new(ok: @github.authenticated?, name: "gh authentication", detail: @github.repo_name),
+        *runner_checks
+      ]
+    rescue => e
+      [Check.new(ok: false, name: "doctor", detail: e.message)]
+    end
+
+    def healthy?
+      checks.all?(&:ok)
+    end
+
+    private
+
+    def runner_checks
+      @config.roles.flat_map { |role| role.models.map(&:runner) }.uniq.map do |name|
+        executable = @config.runner(name).fetch("command")
+        Check.new(
+          ok: @command.executable?(executable),
+          name: "runner #{name}",
+          detail: executable
+        )
+      end
+    end
+  end
+end

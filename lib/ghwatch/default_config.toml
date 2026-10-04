@@ -1,0 +1,73 @@
+[project]
+poll_interval = "10m"
+discovery_interval = "2h"
+retry_after = "10m"
+max_workers = 2
+candidate_limit = 20
+worktree_root = ".worktrees"
+branch_prefix = "ghwatch/issue-"
+review_all_open_prs = true
+
+[github]
+auto_merge = true
+merge_method = "squash"
+human_language = "auto"
+close_issue_after_merge = true
+require_green_checks = true
+
+[runners.claude]
+command = "claude"
+timeout = "90m"
+
+[runners.codex]
+command = "codex"
+timeout = "90m"
+
+[runners.opencode]
+command = "opencode"
+timeout = "90m"
+
+[roles.triage]
+prompt = "triage.md"
+
+[[roles.triage.models]]
+runner = "opencode"
+model = "opencode-go/mimo-v2.6-flash"
+
+[roles.worker]
+prompt = "worker.md"
+
+[[roles.worker.models]]
+runner = "claude"
+model = "sonnet"
+fallback_on = ["capacity", "quota"]
+
+[[roles.worker.models]]
+runner = "codex"
+model = "gpt-5.6-luna"
+
+[roles.reviewer]
+prompt = "reviewer.md"
+
+[[roles.reviewer.models]]
+runner = "opencode"
+model = "openai/gpt-6-luna"
+
+[roles.deep_reviewer]
+prompt = "deep_reviewer.md"
+
+[[roles.deep_reviewer.models]]
+runner = "opencode"
+model = "openai/gpt-6.1-sol"
+
+[roles.finalizer]
+prompt = "finalizer.md"
+
+[[roles.finalizer.models]]
+runner = "claude"
+model = "sonnet"
+fallback_on = ["capacity", "quota"]
+
+[[roles.finalizer.models]]
+runner = "codex"
+model = "gpt-5.6-luna"
