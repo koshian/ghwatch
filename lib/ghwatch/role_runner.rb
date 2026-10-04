@@ -25,14 +25,18 @@ module Ghwatch
       @log = log
     end
 
-    def run(role, context:, cwd:)
+    def run(role, context:, cwd:, task: nil)
       role_config = @config.role(role)
       prompt = @prompt_store.compose(role, context: context)
       last_outcome = nil
 
       role_config.models.each_with_index do |target, index|
         runner = build_runner(target.runner)
-        @log.info("[#{role}] starting #{target.runner}:#{target.model}")
+        task_details = if task
+          " [#{task.id}] Issue #{task.issue_number ? "##{task.issue_number}" : "none"}, " \
+            "PR #{task.pr_number ? "##{task.pr_number}" : "none"}; state=#{task.state}"
+        end
+        @log.info("[#{role}] starting #{target.runner}:#{target.model}#{task_details}")
         invocation = runner.run(
           model: target.model,
           prompt: prompt,

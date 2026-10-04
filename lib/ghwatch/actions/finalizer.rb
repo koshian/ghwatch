@@ -28,7 +28,7 @@ module Ghwatch
           issue: snapshot.issue,
           pull_request: snapshot.pull_request
         )
-        outcome = @roles.run("finalizer", context: context, cwd: task.worktree || @project.root)
+        outcome = @roles.run("finalizer", context: context, cwd: task.worktree || @project.root, task: task)
         remember_outcome(task, outcome)
 
         unless outcome.success?

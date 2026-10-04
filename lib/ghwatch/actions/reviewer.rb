@@ -9,7 +9,7 @@ module Ghwatch
         task.issue_number ||= linked_issue_number(pull_request)
         issue = task.issue_number && @github.issue(task.issue_number)
         context = @context_builder.reviewer(task: task, issue: issue, pull_request: pull_request)
-        outcome = @roles.run(role, context: context, cwd: @project.root)
+        outcome = @roles.run(role, context: context, cwd: @project.root, task: task)
         remember_outcome(task, outcome)
 
         unless outcome.success?
