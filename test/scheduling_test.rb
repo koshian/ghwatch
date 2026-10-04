@@ -28,7 +28,7 @@ class SchedulingTest < Minitest::Test
       config: OpenStruct.new(reload_if_changed!: false), github: nil
     )
     scheduler.cycle
-    assert_equal %i[reconcile discover pull_requests watch triage issues], events
+    assert_equal %i[reconcile discover pull_requests watch triage all], events
     [engine, intake, triage].each(&:verify)
   end
 

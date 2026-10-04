@@ -3,6 +3,7 @@
 require_relative "test_helper"
 require "ostruct"
 require "stringio"
+require "minitest/mock"
 
 class PrWorkTest < Minitest::Test
   class Github < Ghwatch::Github
@@ -80,6 +81,82 @@ class PrWorkTest < Minitest::Test
     assert_equal [[:worker, 164], [:review, 164], [:merge, 164], [:review, 170], [:merge, 170]], events
     assert older.done?
     assert newer.done?
+  end
+
+  def test_retry_becoming_due_during_another_pr_runs_before_newer_prs_and_issues
+    now = Time.at(1_000)
+    older = Ghwatch::Task.for_pr(164)
+    older.state = "changes_requested"
+    older.retry_at = 1_010
+    current = Ghwatch::Task.for_pr(174)
+    current.retry_at = 0
+    newer = Ghwatch::Task.for_pr(175)
+    newer.retry_at = 0
+    issue = Ghwatch::Task.for_issue(71, branch: "issue-71", worktree: nil)
+    events = []
+    action = Action.new do |task|
+      events << (task.pr_number || :issue)
+      now = Time.at(1_020) if task.pr_number == 174
+      task.transition_to("done")
+    end
+    machine = engine([issue, newer, older, current], github: Github.new([pr(164), pr(174), pr(175)]), worker: action, reviewer: action)
+    Time.stub(:now, -> { now }) { machine.run_due }
+    assert_equal [174, 164, 175, :issue], events
+    assert older.done?
+  end
+
+  def test_only_waiting_prs_allow_issue_work_without_starting_pr_actions
+    human_wait = Ghwatch::Task.for_pr(164)
+    human_wait.state = "waiting_for_human_test"
+    ci_wait = Ghwatch::Task.for_pr(170)
+    ci_wait.state = "ready_to_merge"
+    ci_wait.retry_at = Time.now.to_i + 3_600
+    retry_wait = Ghwatch::Task.for_pr(174)
+    retry_wait.state = "changes_requested"
+    retry_wait.retry_at = Time.now.to_i + 3_600
+    issue = Ghwatch::Task.for_issue(71, branch: "issue-71", worktree: nil)
+    events = []
+    action = Action.new { |task| events << task.id }
+    machine = engine([human_wait, ci_wait, retry_wait, issue], github: nil, worker: action, reviewer: action)
+    machine.run_due
+    assert_equal ["issue-71"], events
+  end
+
+  def test_scheduler_drains_retries_before_triage_and_checks_again_before_issue_work
+    now = Time.at(1_000)
+    older = Ghwatch::Task.for_pr(164)
+    older.state = "changes_requested"
+    older.retry_at = 1_010
+    after_triage = Ghwatch::Task.for_pr(170)
+    after_triage.state = "changes_requested"
+    after_triage.retry_at = 1_030
+    current = Ghwatch::Task.for_pr(174)
+    current.retry_at = 0
+    issue = Ghwatch::Task.for_issue(71, branch: "issue-71", worktree: nil)
+    events = []
+    action = Action.new do |task|
+      events << (task.pr_number || :issue)
+      now = Time.at(1_020) if task.pr_number == 174
+      task.transition_to("done")
+    end
+    machine = engine([older, after_triage, current, issue], github: Github.new([pr(164), pr(170), pr(174)]), worker: action, reviewer: action)
+    # Keep the initial reconciliation from waking reviews: this test exercises scheduling.
+    machine.define_singleton_method(:reconcile_all) {}
+    intake = Object.new
+    intake.define_singleton_method(:discover) {}
+    triage = Object.new
+    triage.define_singleton_method(:request_if_watched_issue_changed) {}
+    triage.define_singleton_method(:due?) { true }
+    triage.define_singleton_method(:run) do
+      events << :triage
+      now = Time.at(1_040)
+    end
+    scheduler = Ghwatch::Scheduler.new(
+      task_engine: machine, review_intake: intake, issue_triage: triage,
+      config: OpenStruct.new(reload_if_changed!: false), github: nil
+    )
+    Time.stub(:now, -> { now }) { scheduler.cycle }
+    assert_equal [174, 164, :triage, 170, :issue], events
   end
 
   def test_unknown_draft_and_actual_human_input_waits_do_not_trigger_conflict_rework

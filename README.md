@@ -300,6 +300,11 @@ issue implementation. Human waits and future retries are still respected, so a b
 does not prevent unrelated issues from progressing. Issue tasks retain their registration
 order; PR tasks run in ascending PR number order. Each PR can progress
 through rework, review, merge and finalization in the same cycle, with at most six actions.
+After each PR, runnable PR tasks are selected again from oldest to newest, including tasks
+whose retry time arrived during another PR's execution. Issue triage starts only after
+this pass has no remaining runnable PR tasks. PR tasks are checked again after triage,
+before issue implementation, to account for retry times reached while triage was running.
+Each PR is processed at most once per pass so an unchanged result cannot cause a busy loop.
 An unchanged state stops that pass; repeated transitions reach the limit and schedule a
 retry. Priority does not bypass review, checks or required human verification.
 

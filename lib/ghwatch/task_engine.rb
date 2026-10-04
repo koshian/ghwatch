@@ -20,28 +20,40 @@ module Ghwatch
     end
 
     def run_due(stop_requested: -> { false }, scope: :all)
-      pull_request_tasks, issue_tasks = active_tasks.partition { |task| task.pr_number }
-      pull_request_tasks.sort_by!(&:pr_number)
-      tasks = case scope
-      when :pull_requests then pull_request_tasks
-      when :issues then issue_tasks
-      when :all then pull_request_tasks + issue_tasks
-      else raise ArgumentError, "unknown task scope #{scope.inspect}"
-      end
+      raise ArgumentError, "unknown task scope #{scope.inspect}" unless %i[all pull_requests issues].include?(scope)
 
-      tasks.each do |task|
+      run_pull_requests(stop_requested: stop_requested) unless scope == :issues
+      return if scope == :pull_requests
+
+      active_tasks.reject(&:pr_number).each do |task|
         break if stop_requested.call
 
-        run_task(task, stop_requested: stop_requested)
-      rescue => e
-        @log.error("task #{task.id} action failed: #{e.class}: #{e.message}")
-        task.last_error = e.message
-        task.schedule_retry(after: @config.retry_after)
-        @state.save_task(task)
+        run_task_safely(task, stop_requested: stop_requested)
       end
     end
 
     private
+
+    def run_pull_requests(stop_requested:)
+      processed = []
+      until stop_requested.call
+        task = active_tasks.select { |candidate| candidate.pr_number && !processed.include?(candidate.id) && action_due?(candidate) }
+          .min_by(&:pr_number)
+        break unless task
+
+        processed << task.id
+        run_task_safely(task, stop_requested: stop_requested)
+      end
+    end
+
+    def run_task_safely(task, stop_requested:)
+      run_task(task, stop_requested: stop_requested)
+    rescue => e
+      @log.error("task #{task.id} action failed: #{e.class}: #{e.message}")
+      task.last_error = e.message
+      task.schedule_retry(after: @config.retry_after)
+      @state.save_task(task)
+    end
 
     def run_task(task, stop_requested:)
       limit = task.pr_number ? MAX_ACTIONS_PER_TASK : 1
