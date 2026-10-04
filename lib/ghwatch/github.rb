@@ -54,11 +54,17 @@ module Ghwatch
     end
 
     def pull_request(number)
-      gh_json(
+      pull_request = gh_json(
         "pr", "view", number.to_s,
         "--json", "number,title,body,state,url,isDraft,headRefName,headRefOid,baseRefName,updatedAt,mergedAt," \
-                  "mergeable,statusCheckRollup,reviewDecision,reviews,headRepository"
-      ).merge(
+                  "mergeable,statusCheckRollup,reviewDecision,reviews,headRepository,headRepositoryOwner"
+      )
+      head_repository = pull_request["headRepository"]
+      owner = pull_request.dig("headRepositoryOwner", "login")
+      if head_repository && owner && head_repository["name"]
+        head_repository["nameWithOwner"] = "#{owner}/#{head_repository.fetch("name")}"
+      end
+      pull_request.merge(
         "closingIssuesReferences" => closing_issues_references(number),
         "comments" => issue_comments(number),
         "inlineComments" => gh_api_paginated("repos/#{repo_name}/pulls/#{number}/comments?per_page=100")
