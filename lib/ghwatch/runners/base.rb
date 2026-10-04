@@ -51,6 +51,7 @@ module Ghwatch
 
       def classify(result)
         return "timeout" if result.timed_out
+        return nil if result.success? && valid_result?(result.stdout)
 
         text = result.text.downcase
         return "quota" if ["usage limit", "usage limits", "quota", "no weighted tokens left", "no tokens left"].any? { |pattern| text.include?(pattern) }
@@ -58,6 +59,13 @@ module Ghwatch
         return nil if result.success?
 
         "command"
+      end
+
+      def valid_result?(output)
+        Result.parse(output)
+        true
+      rescue Result::ProtocolError
+        false
       end
 
       def capacity_patterns

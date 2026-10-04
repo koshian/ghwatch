@@ -142,6 +142,10 @@ module Ghwatch
         task.transition_to("waiting_for_review", retry_at: Time.now.to_i)
       elsif snapshot.review_signature != task.last_review_signature
         task.retry_at = Time.now.to_i
+      elsif task.state != "ready_to_merge" && snapshot.pull_request_signature != task.last_pr_signature
+        task.retry_at = Time.now.to_i
+      elsif task.retry_at.nil? && task.state != "ready_to_merge"
+        task.schedule_retry(after: @config.retry_after)
       end
     end
 

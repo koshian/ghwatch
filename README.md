@@ -302,6 +302,8 @@ registration order. Priority does not bypass review, checks or required human ve
 
 Failures and protocol no-ops get a persisted retry time. A task does not become permanently
 silent merely because a subprocess exited without producing the required ghwatch result.
+Non-blocking review comments also schedule a retry, and CI/mergeability changes wake pending
+reviews. Check changes alone do not invalidate an accepted review in `ready_to_merge`.
 
 ## Triage
 

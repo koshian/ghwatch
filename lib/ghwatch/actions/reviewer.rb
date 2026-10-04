@@ -87,7 +87,7 @@ module Ghwatch
           post_review_body(task, data.fetch("body"), outcome, kind: "review-comment")
           task.last_review_signature = refreshed_review_signature(task, fallback: initial_signature)
           task.state = "waiting_for_review"
-          task.retry_at = nil
+          task.schedule_retry(after: @config.retry_after)
         when "retry"
           task.schedule_retry(after: @config.retry_after)
         else

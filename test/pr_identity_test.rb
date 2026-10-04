@@ -283,4 +283,56 @@ class PrIdentityTest < Minitest::Test
     assert @human_channel.reply_received?(@task)
     assert_equal [160], @github.lookups
   end
+
+  def test_non_blocking_review_comments_schedule_another_review
+    create_pr
+    @task.pr_number = 164
+    triage = Object.new
+    def triage.request! = nil
+    reviewer = Ghwatch::Actions::Reviewer.new(**action_options.merge(issue_triage: triage))
+    reviewer.send(:apply_result, @task, @github.pr, OpenStruct.new(
+      data: {"status" => "comment", "body" => "Wait for CI completion"}, signature: "reviewer"
+    ))
+    assert_equal "waiting_for_review", @task.state
+    assert @task.retry_at
+    refute @task.retry_due?
+  end
+
+  def test_existing_review_wait_without_retry_is_recovered
+    create_pr
+    @task.pr_number = 164
+    @task.state = "waiting_for_review"
+    @task.last_review_signature = "review"
+    @task.last_pr_signature = "pr"
+    @engine.reconcile_all
+    assert @task.retry_at
+    refute @task.retry_due?
+    @engine.run_due
+    assert_empty @reviewer.calls
+  end
+
+  def test_ci_completion_wakes_pending_review_without_invalidating_accepted_review
+    github = Ghwatch::Github.new(project: nil, command: nil)
+    before = {"state" => "OPEN", "headRefOid" => "same", "statusCheckRollup" => [
+      {"status" => "IN_PROGRESS", "conclusion" => ""}
+    ]}
+    after = before.merge("statusCheckRollup" => [{"status" => "COMPLETED", "conclusion" => "SUCCESS"}])
+    @task.last_review_signature = github.review_signature(before)
+    @task.last_pr_signature = github.pr_signature(before)
+    snapshot = Ghwatch::TaskSnapshot.new(
+      issue: nil, pull_request: after, issue_signature: nil,
+      pull_request_signature: github.pr_signature(after), review_signature: github.review_signature(after)
+    )
+    @task.state = "waiting_for_review"
+    @task.schedule_retry(after: 3600)
+    @engine.send(:schedule_review_when_needed, @task, snapshot)
+    assert @task.retry_due?
+
+    @task.state = "ready_to_merge"
+    @task.schedule_retry(after: 3600)
+    retry_at = @task.retry_at
+    @engine.send(:schedule_review_when_needed, @task, snapshot)
+    assert_equal "ready_to_merge", @task.state
+    assert_equal retry_at, @task.retry_at
+  end
 end
