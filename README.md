@@ -26,19 +26,55 @@ stable.
 The default configuration uses Claude, Codex, and OpenCode, but none is hard-coded to a role.
 You can configure any supported runner/model combination.
 
-## Install for development
+## Install
 
-```sh
-bundle install
-bundle exec ruby -Ilib bin/ghwatch --help
-```
-
-As a gem:
+Build and install the gem from a checkout. `--user-install` installs into your RubyGems user
+directory, so it works with a distribution Ruby (e.g. Debian's `ruby` package) without root:
 
 ```sh
 gem build ghwatch.gemspec
-gem install ./ghwatch-0.1.0.gem
+gem install --user-install ./ghwatch-*.gem
 ghwatch --help
+```
+
+The same thing via Rake (builds into `pkg/`):
+
+```sh
+bundle exec rake install:user    # gem install --user-install
+bundle exec rake install:local   # gem install into the default GEM_HOME
+```
+
+The installed gem does not need Bundler or the source checkout.
+
+### Putting `ghwatch` on your PATH
+
+With `--user-install`, RubyGems puts the `ghwatch` executable in the `bin` directory of its
+user gem directory, which is usually *not* `~/.local/bin`. On Debian with Ruby 3.3 it is
+`~/.local/share/gem/ruby/3.3.0/bin`. Ask RubyGems where it is:
+
+```sh
+ruby -r rubygems -e 'puts Gem.user_dir'
+```
+
+and add its `bin` subdirectory to your PATH, e.g. in `~/.profile` or `~/.bashrc`:
+
+```sh
+export PATH="$(ruby -r rubygems -e 'puts Gem.user_dir')/bin:$PATH"
+```
+
+### Native extensions
+
+The `sqlite3` dependency ships precompiled binaries for common platforms, and on Ruby 3.3
+the `racc` gem needed by `toml-rb` is already bundled with Ruby, so a normal install does
+not compile anything. If RubyGems does need to build a native extension (unusual platform,
+or an isolated `GEM_HOME` that hides the bundled gems), install a compiler and the Ruby
+headers first, e.g. `sudo apt install build-essential ruby-dev` on Debian.
+
+### From a checkout (development)
+
+```sh
+bundle install
+bundle exec ruby bin/ghwatch --help
 ```
 
 ## Start a project

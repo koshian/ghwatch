@@ -5,6 +5,10 @@ require "thor"
 
 module Ghwatch
   class PromptCLI < Thor
+    def self.exit_on_failure?
+      true
+    end
+
     desc "list", "List configurable role prompts"
     def list
       project, config = load_project_and_config
@@ -30,7 +34,14 @@ module Ghwatch
   end
 
   class CLI < Thor
-    default_task :run
+    # "run" is a Thor reserved word, so the command is implemented as
+    # run_foreground and exposed to users as "ghwatch run".
+    map "run" => :run_foreground
+    default_command :run_foreground
+
+    def self.exit_on_failure?
+      true
+    end
 
     desc "init", "Create .ghwatch/config.toml in the current Git repository"
     option :force, type: :boolean, default: false
@@ -60,7 +71,7 @@ module Ghwatch
     end
 
     desc "run", "Run ghwatch in the foreground"
-    def run
+    def run_foreground
       components = build_components
       components.fetch(:scheduler).run
     rescue Project::NotARepository, Config::Error => e
