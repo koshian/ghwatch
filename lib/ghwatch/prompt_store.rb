@@ -26,6 +26,14 @@ module Ghwatch
         requests. This language setting takes precedence over the language of this prompt
         and the existing GitHub discussion. Keep code identifiers, machine-readable JSON
         keys, and protocol status values unchanged.
+
+        Format URLs in human-facing GitHub prose as Markdown links: [descriptive label](URL).
+        Use this format for issues, pull requests, workflow runs, test builds and artifacts.
+        Do not enclose bare URLs in Japanese full-width parentheses or rely on automatic
+        URL linking. For example: Reply to [Issue #123](https://github.com/owner/repo/issues/123).
+        Preserve literal URLs in code, commands, reproduction examples and machine-readable
+        JSON fields that require a URL value. This formatting rule also applies to local
+        prompt overrides, regardless of the requested language.
       TEXT
       [read(role), context, Result.contract_for(role), language_instruction].join("\n\n---\n\n")
     end
