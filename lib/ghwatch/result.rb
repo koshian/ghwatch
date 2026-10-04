@@ -166,7 +166,11 @@ module Ghwatch
         For waiting_for_human_test, include test_preparation and make body a self-contained
         request with the tested commit, what was verified, what remains, how to obtain and
         start the test subject, and steps with expected results. Explain when no artifact
-        is needed. When all required checks are verified and the change is acceptable,
+        is needed. Include the PR URL and direct build/artifact links when applicable.
+        ghwatch posts this request on the source Issue and mentions its reporter; ask for
+        results on that Issue. PR-only tasks use the PR conversation. Environment setup
+        requests (waiting_for_human_input) continue to ask for a reply on the PR.
+        When all required checks are verified and the change is acceptable,
         return merge rather than asking for redundant human testing.
       TEXT
     end
@@ -175,6 +179,11 @@ module Ghwatch
       <<~TEXT
         Do not edit source code. Verify whether the merged work resolves the related issue.
         Return the final GitHub action to ghwatch.
+        For waiting_for_human_test, make comment a complete request with the PR link,
+        tested SHA, direct test-build links and artifact/startup instructions when needed,
+        what was already verified, remaining steps and expected results. ghwatch posts
+        this request on the source Issue and mentions its reporter; ask for results there.
+        A task without a source Issue uses the PR conversation instead.
 
         Finish with exactly one result:
 

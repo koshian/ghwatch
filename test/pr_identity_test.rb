@@ -15,7 +15,7 @@ class PrIdentityTest < Minitest::Test
     end
 
     def issue(number)
-      {"number" => number, "state" => "OPEN"}
+      {"number" => number, "state" => "OPEN", "author" => {"login" => "reporter"}}
     end
 
     def pull_request(number)
@@ -303,7 +303,7 @@ class PrIdentityTest < Minitest::Test
     assert_empty @github.comments
   end
 
-  def test_review_test_request_and_reply_use_the_pr_conversation
+  def test_review_test_request_mentions_reporter_on_the_issue_and_detects_issue_reply
     create_pr
     @task.pr_number = 164
     triage = Object.new
@@ -311,11 +311,31 @@ class PrIdentityTest < Minitest::Test
     reviewer = Ghwatch::Actions::Reviewer.new(**action_options.merge(issue_triage: triage))
     outcome = OpenStruct.new(data: {"status" => "waiting_for_human_test", "body" => "Test this PR"}, signature: "reviewer")
     reviewer.send(:apply_result, @task, @github.pr, outcome)
-    assert_equal [[:pr, 164, "Test this PR"]], @github.comments
+    assert_equal [[:issue, 160, "@reporter\n\nTest this PR"]], @github.comments
     assert_equal "waiting_for_human_test", @task.state
     restored = Ghwatch::Task.from_row(@task.to_row)
     assert @human_channel.reply_received?(restored)
-    assert_equal [164], @github.lookups
+    assert_equal [160], @github.lookups
+  end
+
+  def test_pr_only_test_request_uses_pr_and_existing_mention_is_not_duplicated
+    task = Ghwatch::Task.for_pr(164)
+    outcome = OpenStruct.new(signature: "reviewer")
+    @human_channel.wait(task: task, body: "Test this PR", outcome: outcome,
+      kind: "human-test", resume_state: "waiting_for_review", target: :pull_request)
+    assert_equal [[:pr, 164, "Test this PR"]], @github.comments
+    @human_channel.wait(task: @task, body: "@reporter please test", outcome: outcome,
+      kind: "human-test", resume_state: "waiting_for_review")
+    assert_equal [:issue, 160, "@reporter please test"], @github.comments.last
+  end
+
+  def test_deleted_reporter_does_not_prevent_issue_test_request
+    def @github.issue(number) = {"number" => number, "state" => "OPEN", "author" => nil}
+    outcome = OpenStruct.new(signature: "reviewer")
+    @human_channel.wait(task: @task, body: "Test build: https://example.com/build", outcome: outcome,
+      kind: "human-test", resume_state: "waiting_for_review", target: :pull_request)
+    assert_equal [[:issue, 160, "Test build: https://example.com/build"]], @github.comments
+    assert_equal 160, @task.metadata["human_conversation_number"]
   end
 
   def test_existing_issue_waits_still_detect_replies_on_the_issue

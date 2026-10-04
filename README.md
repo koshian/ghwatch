@@ -347,7 +347,10 @@ An existing owned review workspace is updated to that SHA without changing the w
 workspace. Reviewers may build, run tests and use project-provided GUI verification tools
 such as Xvfb; they cannot edit source, commit, push or merge. Review feedback must describe
 the tested SHA, commands, observations and evidence paths. Human requests are limited to
-checks the reviewer cannot perform, and direct replies to the PR.
+checks the reviewer cannot perform. Human test requests are posted on the source Issue
+with its reporter mentioned, PR and test-build links, the tested SHA, artifact/startup
+instructions, and steps with expected results. Replies are monitored on that Issue.
+PR-only tasks use the PR conversation; existing waits retain their recorded reply channel.
 
 Missing development-environment packages use reviewer `waiting_for_human_input` rather
 than worker rework or human testing. The PR request lists verified package names, their

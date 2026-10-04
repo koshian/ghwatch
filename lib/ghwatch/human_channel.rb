@@ -16,6 +16,13 @@ module Ghwatch
     end
 
     def wait(task:, body:, outcome:, kind:, resume_state:, target: :issue)
+      if kind == "human-test" && task.issue_number
+        target = :issue
+        author = @github.issue(task.issue_number).dig("author", "login")
+        if author && !body.match?(/@#{Regexp.escape(author)}(?![A-Za-z0-9-])/)
+          body = "@#{author}\n\n#{body}"
+        end
+      end
       conversation = (target == :pull_request) ? task.pr_number : task.issue_number || task.pr_number
       raise "cannot ask a human without an issue or PR" unless conversation
 

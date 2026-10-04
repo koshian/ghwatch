@@ -83,7 +83,11 @@ module Ghwatch
         Record the tested commit, commands, observations and evidence paths in the review body.
         Use changes_requested for defects or missing test infrastructure that needs code changes.
         Request human testing only for specific checks you cannot perform in this environment;
-        explain what you tried and the remaining limitation. Direct replies to this PR.
+        explain what you tried and the remaining limitation. ghwatch posts human test requests
+        on the source Issue and mentions its reporter when available. Include the PR link,
+        test build URL, tested SHA, artifact names, access and startup instructions, exact
+        steps and expected results in the request. Ask the reporter to reply on the Issue.
+        If there is no source Issue, the request and reply belong on the PR instead.
         Missing system packages are environment blockers: return waiting_for_human_input
         with the exact apt package names, their purpose, observed errors, a copyable install
         command and verification steps. Ask a human to provision the environment and reply
