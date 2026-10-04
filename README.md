@@ -261,6 +261,16 @@ agent
 
 Real-person verification uses the separate `waiting_for_human_test` state.
 
+Workers prepare human testing according to the project's own development/test workflow:
+complete available autonomous checks, prepare the required test subject, and record evidence
+and usable instructions for the tested commit. Their `waiting_for_human_test` result is a
+proposal: ghwatch persists its preparation information and sends the task to review first.
+The reviewer returns missing preparation to the worker with `changes_requested` and requests
+human testing only when the project requirements are met. Requests include the commit,
+verified and remaining checks, access/startup instructions and expected results; no artifact
+is required when the request explains why. These are agent instructions, not automatic
+validation of builds or evidence. Existing human waits are not migrated.
+
 This keeps product decisions, reproduction details, and test reports next to the GitHub work
 that motivated them.
 

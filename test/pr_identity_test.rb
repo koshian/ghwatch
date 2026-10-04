@@ -188,12 +188,52 @@ class PrIdentityTest < Minitest::Test
 
   def test_worker_retries_when_done_or_ready_for_review_without_a_pr
     worker = Ghwatch::Actions::Worker.new(worktrees: nil, command: nil, **action_options)
-    %w[done waiting_for_review].each do |status|
+    %w[done waiting_for_review waiting_for_human_test].each do |status|
       worker.send(:apply_result, @task, OpenStruct.new(data: {"status" => status}))
       assert_equal "continuing", @task.state
       assert @task.retry_at
       assert_nil @task.pr_number
     end
+  end
+
+  def test_worker_human_test_proposal_is_persisted_and_reviewed_before_notifying_a_person
+    create_pr
+    triage = Object.new
+    def triage.request! = nil
+    preparation = {
+      "commit" => "tested-sha", "verified" => ["automated checks passed"],
+      "remaining" => ["native OS behavior"], "test_subject" => "build URL and startup instructions",
+      "steps" => ["Enable the feature and check the expected result"]
+    }
+    worker = Ghwatch::Actions::Worker.new(worktrees: nil, command: nil, **action_options.merge(issue_triage: triage))
+    outcome = OpenStruct.new(data: {
+      "status" => "waiting_for_human_test", "pr" => 164,
+      "question" => "Please test native OS behavior", "test_preparation" => preparation
+    })
+    worker.send(:apply_result, @task, outcome)
+    assert_equal "waiting_for_review", @task.state
+    assert_equal 164, @task.pr_number
+    assert @task.retry_due?
+    assert_nil @task.human_marker
+    assert_empty @github.comments
+
+    restored = Ghwatch::Task.from_row(@task.to_row)
+    assert_equal preparation, restored.metadata["test_preparation"]
+    context = Ghwatch::ContextBuilder.new(config: @config).reviewer(
+      task: restored, issue: @github.issue(160), pull_request: @github.pr
+    )
+    assert_includes context, "tested-sha"
+    assert_includes context, "Please test native OS behavior"
+
+    reviewer = Ghwatch::Actions::Reviewer.new(**action_options.merge(issue_triage: triage))
+    reviewer.send(:apply_result, restored, @github.pr, OpenStruct.new(
+      data: {"status" => "changes_requested", "body" => "Prepare the required test build first"},
+      signature: "reviewer"
+    ))
+    assert_equal "changes_requested", restored.state
+    assert restored.uses_worker_slot?
+    assert_nil restored.human_marker
+    assert_equal [[:pr, 164, "Prepare the required test build first"]], @github.comments
   end
 
   def test_worker_validates_branch_before_storing_pr_identity

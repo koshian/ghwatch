@@ -75,6 +75,12 @@ module Ghwatch
         Related issue: #{task.issue_number || "none"}
         Pull request: #{task.pr_number}
 
+        Worker test preparation (verify against the current PR commit and project policy):
+        #{JSON.pretty_generate(task.metadata["test_preparation"])}
+
+        Proposed human test request (not yet sent to a person):
+        #{JSON.pretty_generate(task.metadata["human_test_request"])}
+
         Issue snapshot:
         #{JSON.pretty_generate(compact_issue(issue))}
 

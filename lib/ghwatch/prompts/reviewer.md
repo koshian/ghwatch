@@ -12,3 +12,8 @@ relevant, complexity, maintainability, and appropriate tests.
 Do not authorize merge before required human verification is complete. Request deep review
 only when the change is subtle enough that another stronger review pass is materially useful;
 do not delegate routine reviews.
+
+Before requesting human testing, verify that the worker followed the project's test workflow
+for the current PR commit. Missing autonomous verification, test builds, access links or
+usable instructions are changes_requested for the worker, not a reason to notify a person.
+Ask only for checks that still require a person, with a self-contained, actionable request.

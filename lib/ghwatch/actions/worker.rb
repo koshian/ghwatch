@@ -53,7 +53,7 @@ module Ghwatch
         data = outcome.data
 
         case data["status"]
-        when "waiting_for_review"
+        when "waiting_for_review", "waiting_for_human_test"
           pull_request = if data["pr"]
             @github.pull_request(Integer(data["pr"].to_s, 10))
           else
@@ -63,6 +63,8 @@ module Ghwatch
           raise "worker reported a PR for a different branch" unless pull_request["headRefName"] == task.branch
 
           task.pr_number = pull_request.fetch("number")
+          task.metadata["test_preparation"] = data["test_preparation"]
+          task.metadata["human_test_request"] = (data["status"] == "waiting_for_human_test") ? data.fetch("question") : nil
 
           task.state = "waiting_for_review"
           task.last_review_signature = nil
@@ -70,8 +72,6 @@ module Ghwatch
           @issue_triage.request!
         when "waiting_for_human_input"
           wait_for_human(task, data.fetch("question"), outcome, kind: "human-question", resume_state: task.state)
-        when "waiting_for_human_test"
-          wait_for_human(task, data.fetch("question"), outcome, kind: "human-test", resume_state: task.state)
         when "continue"
           task.state = "continuing"
           task.schedule_retry(after: @config.retry_after)
