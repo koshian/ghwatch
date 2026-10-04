@@ -4,7 +4,7 @@
 review agents, and asynchronous human feedback.
 
 It runs as one durable foreground state machine. GitHub is the shared conversation surface:
-implementation questions and real-person test requests are posted to issues, human replies
+implementation questions and worker test requests are posted to issues, human replies
 wake the task again, and pull-request discussion drives review and rework.
 
 The agent CLIs and models used for each role are configured per project. Built-in prompts can
@@ -308,6 +308,16 @@ human-created PRs use the same review pipeline.
 
 Review agents are instructed to be read-only. ghwatch, rather than the reviewer process,
 performs comments and merges from the structured review result.
+
+The originating issue number and PR number are separate task identities. Worker-reported
+PR numbers are fetched as pull requests and checked against the task branch before being
+attached. Otherwise ghwatch discovers the PR by its head branch. An issue's existence never
+substitutes for a PR. Without a PR, review and finalization wait and issue tasks return to
+the existing worker retry flow; finalization requires a merged PR. Workers never merge.
+
+Reviewer test requests are posted to the PR, and replies are watched on that same PR.
+Worker and finalizer questions remain on the related issue. Existing pending issue requests
+continue watching their original conversation after an upgrade.
 
 When `require_green_checks = true`, an accepted PR waits in `ready_to_merge` until GitHub checks
 are green and GitHub reports the PR mergeable. A code/review-discussion change invalidates the

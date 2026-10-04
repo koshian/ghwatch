@@ -21,6 +21,12 @@ module Ghwatch
       active_tasks.each do |task|
         break if stop_requested.call
         next unless action_due?(task)
+        if task.review_state? || task.state == "finalizing"
+          snapshot = TaskSnapshot.capture(task: task, github: @github)
+          next if recover_without_pull_request(task, snapshot.pull_request)
+
+          task.pr_number = snapshot.pull_request.fetch("number")
+        end
 
         case task.state
         when "implementing", "changes_requested", "continuing"
@@ -51,6 +57,7 @@ module Ghwatch
       pull_request = snapshot.pull_request
 
       attach_discovered_pull_request(task, pull_request)
+      return if recover_without_pull_request(task, pull_request)
       return if finish_merged_task(task, pull_request)
       return if recover_from_closed_pull_request(task, pull_request)
 
@@ -73,6 +80,16 @@ module Ghwatch
       task.pr_number = pull_request["number"]
       task.state = "waiting_for_review" if task.uses_worker_slot? && !pull_request["isDraft"]
       task.retry_at = Time.now.to_i
+    end
+
+    def recover_without_pull_request(task, pull_request)
+      return false if pull_request
+      return false unless task.review_state? || task.state == "finalizing"
+
+      task.transition_to("continuing") if task.issue_number
+      task.schedule_retry(after: @config.retry_after)
+      @state.save_task(task)
+      true
     end
 
     def finish_merged_task(task, pull_request)
@@ -105,6 +122,7 @@ module Ghwatch
       resume_state = task.metadata.delete("resume_state") || "implementing"
       @log.info("[#{task.id}] human response received; resuming #{resume_state}")
       task.human_marker = nil
+      task.metadata.delete("human_conversation_number")
       task.transition_to(resume_state, retry_at: Time.now.to_i)
     end
 

@@ -54,8 +54,15 @@ module Ghwatch
 
         case data["status"]
         when "waiting_for_review"
-          task.pr_number = data["pr"]&.to_i || TaskSnapshot.capture(task: task, github: @github).pull_request&.fetch("number", nil)
-          raise "worker reported waiting_for_review but no PR exists" unless task.pr_number
+          pull_request = if data["pr"]
+            @github.pull_request(Integer(data["pr"].to_s, 10))
+          else
+            TaskSnapshot.capture(task: task, github: @github).pull_request
+          end
+          return retry_without_pull_request(task) unless pull_request
+          raise "worker reported a PR for a different branch" unless pull_request["headRefName"] == task.branch
+
+          task.pr_number = pull_request.fetch("number")
 
           task.state = "waiting_for_review"
           task.last_review_signature = nil
@@ -69,13 +76,23 @@ module Ghwatch
           task.state = "continuing"
           task.schedule_retry(after: @config.retry_after)
         when "done"
-          task.state = "finalizing"
+          pull_request = TaskSnapshot.capture(task: task, github: @github).pull_request
+          return retry_without_pull_request(task) unless pull_request
+
+          task.pr_number = pull_request.fetch("number")
+          task.state = pull_request["mergedAt"] ? "finalizing" : "waiting_for_review"
           task.retry_at = Time.now.to_i
         when "deferred"
           defer(task, data)
         else
           raise "unknown worker status #{data["status"].inspect}"
         end
+      end
+
+      def retry_without_pull_request(task)
+        task.transition_to("continuing")
+        task.last_error = "worker finished without a pull request; scheduling retry"
+        task.schedule_retry(after: @config.retry_after)
       end
 
       def defer(task, data)

@@ -28,13 +28,14 @@ module Ghwatch
         task.last_model = outcome.signature
       end
 
-      def wait_for_human(task, body, outcome, kind:, resume_state:)
+      def wait_for_human(task, body, outcome, kind:, resume_state:, target: :issue)
         @human_channel.wait(
           task: task,
           body: body,
           outcome: outcome,
           kind: kind,
-          resume_state: resume_state
+          resume_state: resume_state,
+          target: target
         )
         @issue_triage.request!
       end

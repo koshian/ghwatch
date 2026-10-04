@@ -9,23 +9,24 @@ module Ghwatch
     def reply_received?(task)
       return false unless task.human_marker
 
-      conversation = task.issue_number || task.pr_number
+      conversation = task.metadata["human_conversation_number"] || task.issue_number || task.pr_number
       return false unless conversation
 
       @github.human_comments_after(conversation, marker: task.human_marker).any?
     end
 
-    def wait(task:, body:, outcome:, kind:, resume_state:)
-      conversation = task.issue_number || task.pr_number
+    def wait(task:, body:, outcome:, kind:, resume_state:, target: :issue)
+      conversation = (target == :pull_request) ? task.pr_number : task.issue_number || task.pr_number
       raise "cannot ask a human without an issue or PR" unless conversation
 
-      marker = if task.issue_number
+      marker = if target == :issue && task.issue_number
         @github.post_issue_comment(conversation, body, kind: kind, model_signature: outcome.signature)
       else
         @github.post_pr_comment(conversation, body, kind: kind, model_signature: outcome.signature)
       end
 
       task.human_marker = marker
+      task.metadata["human_conversation_number"] = conversation
       task.metadata["resume_state"] = resume_state
       task.state = (kind == "human-test") ? "waiting_for_human_test" : "waiting_for_human_input"
       task.retry_at = nil

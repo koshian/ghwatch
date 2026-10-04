@@ -16,6 +16,13 @@ module Ghwatch
         end
 
         snapshot = TaskSnapshot.capture(task: task, github: @github)
+        unless snapshot.pull_request && snapshot.pull_request["mergedAt"]
+          task.transition_to(snapshot.pull_request ? "waiting_for_review" : "continuing")
+          task.schedule_retry(after: @config.retry_after)
+          @state.save_task(task)
+          return
+        end
+
         context = @context_builder.finalizer(
           task: task,
           issue: snapshot.issue,
