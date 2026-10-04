@@ -73,7 +73,17 @@ module Ghwatch
         specifications. Inspect the current PR diff, CI/check state, review discussion, and the
         related issue when present. Compare the change with current main where useful.
 
-        Do not edit code or create a worktree. Do not approve a change merely because tests pass.
+        ghwatch prepared a detached review workspace at PR commit #{pull_request["headRefOid"]}.
+        Build and run the project's tests and verification tools in this workspace. Generated
+        build outputs, logs and screenshots are allowed; do not edit source, commit, push,
+        merge, or create or switch worktrees/branches. Do not approve merely because tests pass.
+        Perform checks you can execute yourself, including GUI interaction through virtual
+        displays such as Xvfb when the project provides that workflow. GUI tests are not
+        automatically human-only. Follow project instructions for tools and test scenarios.
+        Record the tested commit, commands, observations and evidence paths in the review body.
+        Use changes_requested for defects or missing test infrastructure that needs code changes.
+        Request human testing only for specific checks you cannot perform in this environment;
+        explain what you tried and the remaining limitation. Direct replies to this PR.
         Check correctness, regressions, error handling, concurrency/resources where relevant,
         maintainability, test coverage, and whether the implementation actually satisfies the
         issue. If project policy requires human verification, do not authorize merge until that

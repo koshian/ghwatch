@@ -149,7 +149,7 @@ module Ghwatch
         log: log
       }
       worker_action = Actions::Worker.new(worktrees: worktrees, command: command, **shared_action_dependencies)
-      reviewer_action = Actions::Reviewer.new(**shared_action_dependencies)
+      reviewer_action = Actions::Reviewer.new(worktrees: worktrees, **shared_action_dependencies)
       finalizer_action = Actions::Finalizer.new(worktrees: worktrees, **shared_action_dependencies)
       task_engine = TaskEngine.new(
         state: state,
@@ -158,6 +158,7 @@ module Ghwatch
         worker_action: worker_action,
         reviewer_action: reviewer_action,
         finalizer_action: finalizer_action,
+        worktrees: worktrees,
         config: config,
         log: log
       )

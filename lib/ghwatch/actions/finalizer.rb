@@ -18,7 +18,7 @@ module Ghwatch
         end
 
         unless task.issue_number
-          @worktrees.cleanup(task) if task.worktree
+          @worktrees.cleanup(task)
           task.state = "done"
           task.retry_at = nil
           @state.save_task(task)

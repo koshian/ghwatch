@@ -4,7 +4,7 @@ module Ghwatch
   class TaskEngine
     MAX_ACTIONS_PER_TASK = 6
 
-    def initialize(state:, github:, human_channel:, worker_action:, reviewer_action:, finalizer_action:, config:, log: Log.new)
+    def initialize(state:, github:, human_channel:, worker_action:, reviewer_action:, finalizer_action:, config:, worktrees: nil, log: Log.new)
       @state = state
       @github = github
       @human_channel = human_channel
@@ -12,6 +12,7 @@ module Ghwatch
       @reviewer_action = reviewer_action
       @finalizer_action = finalizer_action
       @config = config
+      @worktrees = worktrees
       @log = log
     end
 
@@ -152,6 +153,7 @@ module Ghwatch
     def finish_merged_task(task, pull_request)
       return false unless pull_request && pull_request["mergedAt"]
 
+      @worktrees&.cleanup_review(task)
       task.state = (task.issue_number || task.worktree) ? "finalizing" : "done"
       task.retry_at = Time.now.to_i if task.state == "finalizing"
       @state.save_task(task)
@@ -161,6 +163,7 @@ module Ghwatch
     def recover_from_closed_pull_request(task, pull_request)
       return false unless pull_request && pull_request["state"] == "CLOSED" && !pull_request["mergedAt"]
 
+      @worktrees&.cleanup_review(task)
       if task.issue_number
         @log.warn("[#{task.id}] PR ##{pull_request["number"]} closed without merge; returning task to worker")
         task.pr_number = nil

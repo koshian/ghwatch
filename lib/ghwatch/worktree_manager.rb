@@ -44,6 +44,7 @@ module Ghwatch
     end
 
     def cleanup(task)
+      cleanup_review(task)
       return unless task.worktree
 
       path = Pathname(task.worktree)
@@ -58,6 +59,48 @@ module Ghwatch
       git_result("worktree", "prune")
       branch = task.metadata["local_branch"] || task.branch
       delete_branch(branch) if branch && branch_exists?(branch)
+    end
+
+    def prepare_review(task, pull_request, state:)
+      path = @project.root.join(@config.worktree_root, "review-pr-#{task.pr_number}")
+      owned = task.metadata["review_worktree"] == path.to_s
+      registered = registered_worktree?(path)
+      raise "reserved review workspace already exists: #{path}" if !owned && (path.exist? || registered)
+      verify_review_workspace(path) if registered
+
+      git("fetch", "origin", pull_request["baseRefName"]) if pull_request["baseRefName"]
+      git("fetch", "origin", "refs/pull/#{task.pr_number}/head")
+      head = git("rev-parse", "FETCH_HEAD").strip
+      raise "PR head changed while preparing review; retry" unless head == pull_request.fetch("headRefOid")
+
+      task.metadata["review_worktree"] = path.to_s
+      state.save_task(task)
+      if registered
+        git("-C", path.to_s, "checkout", "--detach", head)
+      else
+        raise "reserved review workspace directory already exists: #{path}" if path.exist?
+
+        FileUtils.mkdir_p(path.dirname)
+        git("worktree", "add", "--detach", path.to_s, head)
+      end
+      @log.info("[#{task.id}] prepared review workspace #{path} at #{head}")
+      path.to_s
+    end
+
+    def cleanup_review(task)
+      stored_path = task.metadata["review_worktree"]
+      return unless stored_path
+
+      path = @project.root.join(@config.worktree_root, "review-pr-#{task.pr_number}")
+      raise "review workspace ownership changed" unless stored_path == path.to_s
+
+      if registered_worktree?(path)
+        verify_review_workspace(path)
+        git("worktree", "remove", "--force", path.to_s)
+      elsif path.exist?
+        raise "review workspace is no longer registered: #{path}"
+      end
+      task.metadata.delete("review_worktree")
     end
 
     def prepare_pull_request(task, pull_request, state:)
@@ -94,6 +137,11 @@ module Ghwatch
     end
 
     private
+
+    def verify_review_workspace(path)
+      raise "review workspace is on a branch: #{path}" if git_result("-C", path.to_s, "symbolic-ref", "--quiet", "HEAD").success?
+      raise "review workspace has tracked changes: #{path}" unless git("-C", path.to_s, "status", "--porcelain", "--untracked-files=no").strip.empty?
+    end
 
     def fetch_default_branch
       git("fetch", "origin", @github.default_branch)

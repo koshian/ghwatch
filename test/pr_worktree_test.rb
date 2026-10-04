@@ -74,6 +74,53 @@ class PrWorktreeTest < Minitest::Test
     refute @root.join(".worktrees/pr-164").exist?
   end
 
+  def test_review_workspace_is_detached_updates_to_new_head_and_preserves_worker_work
+    @manager.prepare_pull_request(@task, @pr, state: @state)
+    worker_path = Pathname(@task.worktree)
+    worker_path.join("file.txt").write("unfinished worker repair\n")
+    review_path = Pathname(@manager.prepare_review(@task, @pr, state: @state))
+    assert_equal "", git("branch", "--show-current", chdir: review_path).strip
+    assert_equal @head, git("rev-parse", "HEAD", chdir: review_path).strip
+    review_path.join("test.log").write("review evidence\n")
+
+    git("switch", "agent/issue-160")
+    @root.join("file.txt").write("updated PR\n")
+    git("commit", "-am", "Update PR")
+    @pr["headRefOid"] = git("rev-parse", "HEAD").strip
+    git("push", "origin", "HEAD:refs/pull/164/head")
+    git("switch", "master")
+    assert_equal review_path.to_s, @manager.prepare_review(@task, @pr, state: @state)
+    assert_equal @pr["headRefOid"], git("rev-parse", "HEAD", chdir: review_path).strip
+    assert_equal "updated PR\n", review_path.join("file.txt").read
+    assert_equal "review evidence\n", review_path.join("test.log").read
+    assert_equal "unfinished worker repair\n", worker_path.join("file.txt").read
+    @manager.cleanup_review(@task)
+    refute review_path.exist?
+    assert worker_path.exist?
+    refute @task.metadata.key?("review_worktree")
+  end
+
+  def test_review_workspace_refuses_unowned_paths_and_preserves_tracked_changes
+    path = @root.join(".worktrees/review-pr-164")
+    FileUtils.mkdir_p(path)
+    path.join("user.txt").write("unrelated\n")
+    assert_raises(RuntimeError) { @manager.prepare_review(@task, @pr, state: @state) }
+    assert_equal "unrelated\n", path.join("user.txt").read
+    FileUtils.remove_entry(path)
+    @manager.prepare_review(@task, @pr, state: @state)
+    path.join("file.txt").write("unexpected source edit\n")
+    assert_raises(RuntimeError) { @manager.prepare_review(@task, @pr, state: @state) }
+    assert_raises(RuntimeError) { @manager.cleanup_review(@task) }
+    assert_equal "unexpected source edit\n", path.join("file.txt").read
+  end
+
+  def test_review_workspace_rejects_a_stale_snapshot
+    @pr["headRefOid"] = "stale-head"
+    assert_raises(RuntimeError) { @manager.prepare_review(@task, @pr, state: @state) }
+    refute @task.metadata.key?("review_worktree")
+    refute @root.join(".worktrees/review-pr-164").exist?
+  end
+
   private
 
   def git(*args, chdir: @root)

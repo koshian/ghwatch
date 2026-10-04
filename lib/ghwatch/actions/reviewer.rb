@@ -3,17 +3,31 @@
 module Ghwatch
   module Actions
     class Reviewer < Base
+      def initialize(worktrees: nil, **kwargs)
+        super(**kwargs)
+        @worktrees = worktrees
+      end
+
       def run(task, role: "reviewer")
         snapshot = TaskSnapshot.capture(task: task, github: @github)
         pull_request = snapshot.pull_request || raise("PR ##{task.pr_number} is unavailable")
         task.issue_number ||= linked_issue_number(pull_request)
         issue = task.issue_number && @github.issue(task.issue_number)
+        workspace = @worktrees.prepare_review(task, pull_request, state: @state)
         context = @context_builder.reviewer(task: task, issue: issue, pull_request: pull_request)
-        outcome = @roles.run(role, context: context, cwd: @project.root, task: task)
+        outcome = @roles.run(role, context: context, cwd: workspace, task: task)
         remember_outcome(task, outcome)
 
         unless outcome.success?
           retry_failed_role(task, outcome)
+          return
+        end
+
+        current = TaskSnapshot.capture(task: task, github: @github).pull_request
+        unless current && current["headRefOid"] == pull_request.fetch("headRefOid") && current["state"] == "OPEN"
+          task.last_error = "PR changed during review; retry against its current head"
+          task.schedule_retry(after: @config.retry_after)
+          @state.save_task(task)
           return
         end
 
@@ -45,6 +59,7 @@ module Ghwatch
         end
 
         @github.merge_pull_request(task.pr_number, method: @config.merge_method)
+        @worktrees&.cleanup_review(task)
         task.state = (task.issue_number || task.worktree) ? "finalizing" : "done"
         task.retry_at = (task.state == "finalizing") ? Time.now.to_i : nil
         @state.save_task(task)

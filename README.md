@@ -265,7 +265,8 @@ Workers prepare human testing according to the project's own development/test wo
 complete available autonomous checks, prepare the required test subject, and record evidence
 and usable instructions for the tested commit. Their `waiting_for_human_test` result is a
 proposal: ghwatch persists its preparation information and sends the task to review first.
-The reviewer returns missing preparation to the worker with `changes_requested` and requests
+The reviewer runs applicable verification itself, returns preparation requiring code changes
+to the worker with `changes_requested`, and requests
 human testing only when the project requirements are met. Requests include the commit,
 verified and remaining checks, access/startup instructions and expected results; no artifact
 is required when the request explains why. These are agent instructions, not automatic
@@ -315,6 +316,21 @@ and local `ghwatch/pr-N` branch from their verified GitHub head. The task retain
 PR head identity; the worker updates that existing head repository/branch without merging
 or force-pushing. Existing unrelated workspace paths or branches are refused. Workspace
 ownership is persisted so interrupted setup can resume without overwriting local work.
+
+Before normal or deep review, ghwatch prepares a separate detached worktree at
+`.worktrees/review-pr-N`, fetching the PR head and checking it matches the snapshot SHA.
+An existing owned review workspace is updated to that SHA without changing the worker's
+workspace. Reviewers may build, run tests and use project-provided GUI verification tools
+such as Xvfb; they cannot edit source, commit, push or merge. Review feedback must describe
+the tested SHA, commands, observations and evidence paths. Human requests are limited to
+checks the reviewer cannot perform, and direct replies to the PR.
+
+Review workspaces survive retries, CI waits and human waits. ghwatch removes them after
+confirming merge or closure, including externally merged/closed PRs during reconciliation.
+Unowned directories, attached branches and tracked source changes are refused rather than
+overwritten or deleted. Generated build outputs may be removed with the owned workspace;
+publish evidence elsewhere if it must remain available after the PR closes. A PR changed
+during review is retried against its new head before accepting the review result.
 
 Failures and protocol no-ops get a persisted retry time. A task does not become permanently
 silent merely because a subprocess exited without producing the required ghwatch result.
