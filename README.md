@@ -40,8 +40,8 @@ ghwatch --help
 The same thing via Rake (builds into `pkg/`):
 
 ```sh
-bundle exec rake install:user    # gem install --user-install
-bundle exec rake install:local   # gem install into the default GEM_HOME
+rake install:user    # gem install --user-install (no bundle install needed)
+rake install:local   # gem install into the default GEM_HOME
 ```
 
 The installed gem does not need Bundler or the source checkout.
@@ -73,9 +73,13 @@ headers first, e.g. `sudo apt install build-essential ruby-dev` on Debian.
 ### From a checkout (development)
 
 ```sh
+bundle config set --local path vendor/bundle
 bundle install
 bundle exec ruby bin/ghwatch --help
 ```
+
+Setting `path` keeps the bundle inside the checkout. Without it, Bundler tries to install into
+the system gem directory, which is not writable without root on a distribution Ruby.
 
 ## Start a project
 
