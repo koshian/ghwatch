@@ -6,6 +6,8 @@ require "sequel"
 
 module Ghwatch
   class StateStore
+    attr_writer :status_labels
+
     def initialize(path)
       FileUtils.mkdir_p(File.dirname(path))
       @db = Sequel.sqlite(path.to_s)
@@ -41,6 +43,7 @@ module Ghwatch
         @db[:tasks].insert(row.merge(created_at: Time.now.to_i))
       end
 
+      @status_labels&.sync(task)
       task
     end
 

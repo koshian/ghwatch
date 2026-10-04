@@ -121,6 +121,8 @@ module Ghwatch
       command = Command.new(log: log)
       github = Github.new(project: project, command: command, log: log)
       state = StateStore.new(project.state_path)
+      status_labels = StatusLabels.new(state: state, github: github, config: config, log: log)
+      state.status_labels = status_labels
       prompts = PromptStore.new(project: project, config: config)
       roles = RoleRunner.new(config: config, command: command, prompt_store: prompts, log: log, verbose: options[:verbose])
       worktrees = WorktreeManager.new(project: project, config: config, github: github, command: command, log: log)
@@ -169,6 +171,7 @@ module Ghwatch
         issue_triage: issue_triage,
         config: config,
         github: github,
+        status_labels: status_labels,
         log: log
       )
 

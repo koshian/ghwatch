@@ -3,6 +3,7 @@
 require "digest"
 require "json"
 require "securerandom"
+require "uri"
 
 module Ghwatch
   class Github
@@ -117,6 +118,20 @@ module Ghwatch
     def close_issue(number, comment: nil, model_signature: nil)
       post_issue_comment(number, comment, kind: "completion", model_signature: model_signature) if comment && !comment.strip.empty?
       gh("issue", "close", number.to_s)
+    end
+
+    def sync_issue_state_label(number, label:, managed_labels:, color:, description:)
+      current = gh_api_paginated("repos/#{repo_name}/issues/#{number}/labels?per_page=100").map { |item| item.fetch("name") }
+      stale = (current & managed_labels) - [label]
+      unless current.include?(label)
+        available = gh_api_paginated("repos/#{repo_name}/labels?per_page=100").map { |item| item.fetch("name") }
+        gh("label", "create", label, "--repo", repo_name, "--color", color, "--description", description) unless available.include?(label)
+        gh("api", "--method", "POST", "repos/#{repo_name}/issues/#{number}/labels", "-f", "labels[]=#{label}")
+      end
+      stale.each do |name|
+        encoded = URI.encode_www_form_component(name).gsub("+", "%20")
+        gh("api", "--method", "DELETE", "repos/#{repo_name}/issues/#{number}/labels/#{encoded}")
+      end
     end
 
     def merge_pull_request(number, method: "squash")

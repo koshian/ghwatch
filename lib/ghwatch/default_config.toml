@@ -9,6 +9,7 @@ branch_prefix = "ghwatch/issue-"
 review_all_open_prs = true
 
 [github]
+status_labels = true
 auto_merge = true
 merge_method = "squash"
 # Use a language name/tag (e.g. "ja") or infer it from the process environment.

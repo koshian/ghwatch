@@ -2,12 +2,13 @@
 
 module Ghwatch
   class Scheduler
-    def initialize(task_engine:, review_intake:, issue_triage:, config:, github:, log: Log.new)
+    def initialize(task_engine:, review_intake:, issue_triage:, config:, github:, status_labels: nil, log: Log.new)
       @task_engine = task_engine
       @review_intake = review_intake
       @issue_triage = issue_triage
       @config = config
       @github = github
+      @status_labels = status_labels
       @log = log
       @running = true
       @wakeup_reader, @wakeup_writer = IO.pipe
@@ -28,6 +29,7 @@ module Ghwatch
     def cycle
       steps = [
         -> { reload_config_if_changed },
+        -> { @status_labels&.sync_all },
         -> { @task_engine.reconcile_all },
         -> { @review_intake.discover },
         -> { @task_engine.run_due(scope: :pull_requests, stop_requested: -> { !@running }) },

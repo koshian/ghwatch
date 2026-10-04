@@ -133,6 +133,21 @@ ghwatch status
 
 ## Durable state
 
+By default ghwatch reflects each task's state on its source Issue using a single managed
+label, for example `ghwatch:implementing`, `ghwatch:changes-requested`,
+`ghwatch:waiting-for-review`, `ghwatch:ready-to-merge`, `ghwatch:finalizing`, or `ghwatch:done`.
+Human waits use `ghwatch:waiting-for-human-input` and `ghwatch:waiting-for-human-test`.
+Other task states use the same names with underscores replaced by hyphens. `done` means
+the task completed; the Issue may remain open if more work is needed. Triage assessments
+without a task are not labelled. PR-only tasks are labelled once a source Issue is linked.
+
+Labels are synchronized on task saves and each cycle, including existing waiting tasks
+after restart. Only the known state labels are replaced; other labels remain intact.
+An active task takes precedence over completed tasks for the same Issue. API failures
+warn and retry on later synchronization without discarding saved task state.
+Set `github.status_labels = false` to disable synchronization; existing labels remain.
+The GitHub credential needs permission to create repository labels and edit Issue labels.
+
 Runtime state is not stored under `.ghwatch/`. It lives inside the repository's Git directory:
 
 ```text

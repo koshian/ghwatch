@@ -45,6 +45,10 @@ module Ghwatch
       data.fetch("github", {})
     end
 
+    def status_labels?
+      github.fetch("status_labels", true)
+    end
+
     def role(name)
       roles = data.fetch("roles", {})
       role = roles[name.to_s] || raise(Error, "missing [roles.#{name}] configuration")
