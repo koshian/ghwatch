@@ -19,7 +19,7 @@ module Ghwatch
       @log = log
     end
 
-    def run(*argv, chdir: nil, env: {}, timeout: 300, quiet: true, stdin: nil)
+    def run(*argv, chdir: nil, env: {}, timeout: 300, quiet: true, stdin: nil, progress: nil)
       stdout_file = Tempfile.new("ghwatch-stdout")
       stderr_file = Tempfile.new("ghwatch-stderr")
       process = ChildProcess.build(*argv.map(&:to_s))
@@ -32,6 +32,10 @@ module Ghwatch
       @log.info("$ #{argv.join(" ")}") unless quiet
       process.start
       stdin_writer = write_stdin(process, stdin) if stdin
+      if progress
+        progress_stop = Queue.new
+        progress_thread = monitor_output(stdout_file.path, stderr_file.path, progress, progress_stop)
+      end
 
       timed_out = false
       begin
@@ -55,6 +59,8 @@ module Ghwatch
       # Don't leave an agent running when ghwatch is interrupted mid-command.
       process.stop if process&.alive?
       stdin_writer&.join
+      progress_stop&.push(true)
+      progress_thread&.value
       stdout_file&.close!
       stderr_file&.close!
     end
@@ -72,6 +78,24 @@ module Ghwatch
     end
 
     private
+
+    def monitor_output(stdout_path, stderr_path, progress, stop)
+      Thread.new do
+        File.open(stdout_path, "r") do |stdout|
+          File.open(stderr_path, "r") do |stderr|
+            readers = {stdout: stdout, stderr: stderr}
+            loop do
+              readers.each { |stream, reader| progress.output(stream, reader.read) }
+              progress.tick
+              break if stop.pop(timeout: 0.1)
+            end
+            readers.each { |stream, reader| progress.output(stream, reader.read) }
+          end
+        end
+      ensure
+        progress.finish
+      end
+    end
 
     # Written from a thread so a child that stops reading can't block the
     # timeout; the pipe breaks once the child exits or is stopped.

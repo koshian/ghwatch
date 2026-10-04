@@ -116,6 +116,12 @@ or explicitly:
 ghwatch run
 ```
 
+For live agent stdout/stderr and a spinner with elapsed seconds, use `ghwatch -v`
+or `ghwatch run --verbose`. The spinner appears only on a terminal; redirected output
+contains agent text without animation. Only output emitted by the agent CLI can be
+displayed: a CLI that buffers its answer will show a spinner until it emits output.
+Normal invocation keeps the concise logs. Verbose display does not change result parsing.
+
 Inspect durable state:
 
 ```sh

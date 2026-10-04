@@ -71,6 +71,7 @@ module Ghwatch
     end
 
     desc "run", "Run ghwatch in the foreground"
+    option :verbose, aliases: "-v", type: :boolean, default: false, desc: "Show agent output and a terminal spinner"
     def run_foreground
       components = build_components
       components.fetch(:scheduler).run
@@ -121,7 +122,7 @@ module Ghwatch
       github = Github.new(project: project, command: command, log: log)
       state = StateStore.new(project.state_path)
       prompts = PromptStore.new(project: project, config: config)
-      roles = RoleRunner.new(config: config, command: command, prompt_store: prompts, log: log)
+      roles = RoleRunner.new(config: config, command: command, prompt_store: prompts, log: log, verbose: options[:verbose])
       worktrees = WorktreeManager.new(project: project, config: config, github: github, command: command, log: log)
       context_builder = ContextBuilder.new(config: config)
       human_channel = HumanChannel.new(github: github)

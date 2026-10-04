@@ -3,6 +3,7 @@
 require_relative "ghwatch/version"
 require_relative "ghwatch/duration"
 require_relative "ghwatch/log"
+require_relative "ghwatch/agent_progress"
 require_relative "ghwatch/command"
 require_relative "ghwatch/project"
 require_relative "ghwatch/config"

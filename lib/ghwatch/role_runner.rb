@@ -18,11 +18,12 @@ module Ghwatch
       "opencode" => Runners::OpenCode
     }.freeze
 
-    def initialize(config:, command:, prompt_store:, log: Log.new)
+    def initialize(config:, command:, prompt_store:, log: Log.new, verbose: false)
       @config = config
       @command = command
       @prompt_store = prompt_store
       @log = log
+      @verbose = verbose
     end
 
     def run(role, context:, cwd:, task: nil)
@@ -37,11 +38,15 @@ module Ghwatch
             "PR #{task.pr_number ? "##{task.pr_number}" : "none"}; state=#{task.state}"
         end
         @log.info("[#{role}] starting #{target.runner}:#{target.model}#{task_details}")
+        progress = if @verbose
+          AgentProgress.new(label: "[#{role}]#{" [#{task.id}]" if task} #{target.runner}:#{target.model}")
+        end
         invocation = runner.run(
           model: target.model,
           prompt: prompt,
           cwd: cwd,
-          extra_args: target.args
+          extra_args: target.args,
+          progress: progress
         )
 
         if invocation.success?
