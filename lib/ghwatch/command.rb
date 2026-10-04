@@ -19,7 +19,7 @@ module Ghwatch
       @log = log
     end
 
-    def run(*argv, chdir: nil, env: {}, timeout: 300, quiet: true)
+    def run(*argv, chdir: nil, env: {}, timeout: 300, quiet: true, stdin: nil)
       stdout_file = Tempfile.new("ghwatch-stdout")
       stderr_file = Tempfile.new("ghwatch-stderr")
       process = ChildProcess.build(*argv.map(&:to_s))
@@ -27,9 +27,11 @@ module Ghwatch
       env.each { |key, value| process.environment[key.to_s] = value.to_s }
       process.io.stdout = stdout_file
       process.io.stderr = stderr_file
+      process.duplex = true if stdin
 
       @log.info("$ #{argv.join(" ")}") unless quiet
       process.start
+      stdin_writer = write_stdin(process, stdin) if stdin
 
       timed_out = false
       begin
@@ -52,6 +54,7 @@ module Ghwatch
     ensure
       # Don't leave an agent running when ghwatch is interrupted mid-command.
       process.stop if process&.alive?
+      stdin_writer&.join
       stdout_file&.close!
       stderr_file&.close!
     end
@@ -65,6 +68,21 @@ module Ghwatch
           path = File.join(directory, "#{name}#{extension}")
           File.file?(path) && File.executable?(path)
         end
+      end
+    end
+
+    private
+
+    # Written from a thread so a child that stops reading can't block the
+    # timeout; the pipe breaks once the child exits or is stopped.
+    def write_stdin(process, data)
+      Thread.new do
+        io = process.io.stdin
+        io.write(data.to_s)
+      rescue Errno::EPIPE, IOError
+        nil
+      ensure
+        io&.close unless io&.closed?
       end
     end
   end

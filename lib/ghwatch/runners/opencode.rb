@@ -9,8 +9,8 @@ module Ghwatch
         "opencode"
       end
 
-      def build_argv(model:, prompt:, extra_args:)
-        [executable, "run", "--standalone", "--model", model, *extra_args, prompt]
+      def build_argv(model:, extra_args:)
+        [executable, "run", "--standalone", "--model", model, *extra_args]
       end
     end
   end

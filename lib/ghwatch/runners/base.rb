@@ -28,9 +28,11 @@ module Ghwatch
       end
 
       def run(model:, prompt:, cwd:, extra_args: [])
-        argv = build_argv(model: model, prompt: prompt, extra_args: extra_args)
+        # The prompt goes through stdin: as a single argv entry it can exceed
+        # Linux's per-argument limit (128KiB) and fail with E2BIG.
+        argv = build_argv(model: model, extra_args: extra_args)
         timeout = Duration.seconds(@settings.fetch("timeout", "90m"))
-        result = @command.run(*argv, chdir: cwd, timeout: timeout)
+        result = @command.run(*argv, chdir: cwd, timeout: timeout, stdin: prompt)
         error_kind = classify(result)
 
         Invocation.new(

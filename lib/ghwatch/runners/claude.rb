@@ -9,8 +9,8 @@ module Ghwatch
         "claude"
       end
 
-      def build_argv(model:, prompt:, extra_args:)
-        [executable, "--model", model, "--permission-mode", "auto", *extra_args, "-p", prompt]
+      def build_argv(model:, extra_args:)
+        [executable, "--model", model, "--permission-mode", "auto", *extra_args, "-p"]
       end
     end
   end
