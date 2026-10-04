@@ -57,7 +57,7 @@ module Ghwatch
       gh_json(
         "pr", "view", number.to_s,
         "--json", "number,title,body,state,url,isDraft,headRefName,headRefOid,baseRefName,updatedAt,mergedAt," \
-                  "mergeable,statusCheckRollup,reviewDecision,reviews"
+                  "mergeable,statusCheckRollup,reviewDecision,reviews,headRepository"
       ).merge(
         "closingIssuesReferences" => closing_issues_references(number),
         "comments" => issue_comments(number),

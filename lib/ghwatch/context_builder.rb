@@ -38,6 +38,9 @@ module Ghwatch
         Assigned issue: #{task.issue_number || "none"}
         Current pull request: #{task.pr_number || "none"}
         Branch: #{task.branch || "none"}
+        Local workspace branch: #{task.metadata["local_branch"] || task.branch || "none"}
+        Rework requested: #{task.metadata["rework_reason"] || "see PR review discussion"}
+        PR head repository: #{task.metadata["pr_head_repository"] || "see current PR"}
 
         Read the repository's AGENTS.md and relevant project/specification files before changing
         code. The existing worktree is the task's durable workspace; do not create another
@@ -45,6 +48,11 @@ module Ghwatch
 
         You may edit files, run tests, commit, push, and create or update the task's pull request.
         Keep unrelated changes out of the diff. Do not merge your own pull request.
+        When a current PR exists, update that PR rather than creating a replacement. Resolve
+        conflicts with its base branch before requesting review. The local workspace branch
+        may differ from the PR head branch: push HEAD to the existing PR head branch in its
+        head repository, without force-pushing or changing the base branch. If you cannot
+        access that repository, return waiting_for_human_input with the specific blocker.
 
         If a human decision, clarification, reproduction detail, or environment-specific answer
         is required, do not guess. Return waiting_for_human_input with a concise complete

@@ -45,8 +45,8 @@ module Ghwatch
         end
 
         @github.merge_pull_request(task.pr_number, method: @config.merge_method)
-        task.state = task.issue_number ? "finalizing" : "done"
-        task.retry_at = task.issue_number ? Time.now.to_i : nil
+        task.state = (task.issue_number || task.worktree) ? "finalizing" : "done"
+        task.retry_at = (task.state == "finalizing") ? Time.now.to_i : nil
         @state.save_task(task)
         @issue_triage.request!
       rescue => e

@@ -9,16 +9,18 @@ module Ghwatch
       end
 
       def run(task)
-        unless task.issue_number
-          task.state = "done"
-          @state.save_task(task)
-          return
-        end
-
         snapshot = TaskSnapshot.capture(task: task, github: @github)
         unless snapshot.pull_request && snapshot.pull_request["mergedAt"]
           task.transition_to(snapshot.pull_request ? "waiting_for_review" : "continuing")
           task.schedule_retry(after: @config.retry_after)
+          @state.save_task(task)
+          return
+        end
+
+        unless task.issue_number
+          @worktrees.cleanup(task) if task.worktree
+          task.state = "done"
+          task.retry_at = nil
           @state.save_task(task)
           return
         end

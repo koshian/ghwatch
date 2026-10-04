@@ -11,6 +11,10 @@ module Ghwatch
 
       def run(task)
         snapshot = TaskSnapshot.capture(task: task, github: @github)
+        if snapshot.pull_request && !task.worktree
+          @worktrees.prepare_pull_request(task, snapshot.pull_request, state: @state)
+          @state.save_task(task)
+        end
         repository_before = RepositoryState.capture(command: @command, cwd: task.worktree || @project.root)
         context = @context_builder.worker(
           task: task,
@@ -60,7 +64,9 @@ module Ghwatch
             TaskSnapshot.capture(task: task, github: @github).pull_request
           end
           return retry_without_pull_request(task) unless pull_request
+          raise "worker reported a different PR from the assigned PR" if task.pr_number && pull_request["number"] != task.pr_number
           raise "worker reported a PR for a different branch" unless pull_request["headRefName"] == task.branch
+          raise "worker reported review readiness but the PR still has conflicts" if pull_request["mergeable"] == "CONFLICTING"
 
           task.pr_number = pull_request.fetch("number")
           task.metadata["test_preparation"] = data["test_preparation"]

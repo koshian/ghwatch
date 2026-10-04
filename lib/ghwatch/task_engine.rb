@@ -2,6 +2,8 @@
 
 module Ghwatch
   class TaskEngine
+    MAX_ACTIONS_PER_TASK = 6
+
     def initialize(state:, github:, human_channel:, worker_action:, reviewer_action:, finalizer_action:, config:, log: Log.new)
       @state = state
       @github = github
@@ -19,6 +21,7 @@ module Ghwatch
 
     def run_due(stop_requested: -> { false }, scope: :all)
       pull_request_tasks, issue_tasks = active_tasks.partition { |task| task.pr_number }
+      pull_request_tasks.sort_by!(&:pr_number)
       tasks = case scope
       when :pull_requests then pull_request_tasks
       when :issues then issue_tasks
@@ -28,14 +31,32 @@ module Ghwatch
 
       tasks.each do |task|
         break if stop_requested.call
-        next unless action_due?(task)
+
+        run_task(task, stop_requested: stop_requested)
+      rescue => e
+        @log.error("task #{task.id} action failed: #{e.class}: #{e.message}")
+        task.last_error = e.message
+        task.schedule_retry(after: @config.retry_after)
+        @state.save_task(task)
+      end
+    end
+
+    private
+
+    def run_task(task, stop_requested:)
+      limit = task.pr_number ? MAX_ACTIONS_PER_TASK : 1
+      limit.times do
+        return if stop_requested.call || task.done? || !action_due?(task)
+
         if task.review_state? || task.state == "finalizing"
           snapshot = TaskSnapshot.capture(task: task, github: @github)
-          next if recover_without_pull_request(task, snapshot.pull_request)
+          return if recover_without_pull_request(task, snapshot.pull_request)
 
           task.pr_number = snapshot.pull_request.fetch("number")
+          return_conflicting_pr_to_worker(task, snapshot.pull_request)
         end
 
+        previous_state = task.state
         case task.state
         when "implementing", "changes_requested", "continuing"
           @worker_action.run(task)
@@ -46,15 +67,14 @@ module Ghwatch
         when "finalizing"
           @finalizer_action.run(task)
         end
-      rescue => e
-        @log.error("task #{task.id} action failed: #{e.class}: #{e.message}")
-        task.last_error = e.message
+        return if task.state == previous_state
+      end
+
+      if limit > 1 && !task.done? && action_due?(task)
         task.schedule_retry(after: @config.retry_after)
         @state.save_task(task)
       end
     end
-
-    private
 
     def active_tasks
       @state.tasks.reject(&:done?)
@@ -68,6 +88,7 @@ module Ghwatch
       return if recover_without_pull_request(task, pull_request)
       return if finish_merged_task(task, pull_request)
       return if recover_from_closed_pull_request(task, pull_request)
+      return if return_conflicting_pr_to_worker(task, pull_request)
 
       resume_after_human_reply(task) if task.waiting_for_human? && @human_channel.reply_received?(task)
       schedule_review_when_needed(task, snapshot)
@@ -90,6 +111,22 @@ module Ghwatch
       task.retry_at = Time.now.to_i
     end
 
+    def return_conflicting_pr_to_worker(task, pull_request)
+      return false unless pull_request && pull_request["state"] == "OPEN" && pull_request["mergeable"] == "CONFLICTING"
+      return false if pull_request["isDraft"] || task.uses_worker_slot? || task.state == "waiting_for_human_input"
+      return false if task.last_error && task.retry_at && !task.retry_due?
+
+      @log.info("[#{task.id}] PR ##{task.pr_number} conflicts with its base; returning to worker")
+      task.human_marker = nil
+      task.metadata.delete("human_conversation_number")
+      task.metadata.delete("resume_state")
+      task.metadata["rework_reason"] = "Resolve conflicts with the PR base branch, test, and push updates to the existing PR."
+      task.last_review_signature = nil
+      task.transition_to("changes_requested", retry_at: Time.now.to_i)
+      @state.save_task(task)
+      true
+    end
+
     def recover_without_pull_request(task, pull_request)
       return false if pull_request
       return false unless task.review_state? || task.state == "finalizing"
@@ -103,8 +140,8 @@ module Ghwatch
     def finish_merged_task(task, pull_request)
       return false unless pull_request && pull_request["mergedAt"]
 
-      task.state = task.issue_number ? "finalizing" : "done"
-      task.retry_at = Time.now.to_i if task.issue_number
+      task.state = (task.issue_number || task.worktree) ? "finalizing" : "done"
+      task.retry_at = Time.now.to_i if task.state == "finalizing"
       @state.save_task(task)
       true
     end

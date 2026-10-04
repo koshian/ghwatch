@@ -136,6 +136,23 @@ class PrIdentityTest < Minitest::Test
     assert_empty @github.comments
   end
 
+  def test_worker_cannot_replace_an_assigned_pr_or_request_review_with_conflicts
+    create_pr
+    @task.pr_number = 164
+    @task.state = "changes_requested"
+    worker = Ghwatch::Actions::Worker.new(worktrees: nil, command: nil, **action_options)
+    @github.pr["mergeable"] = "CONFLICTING"
+    outcome = OpenStruct.new(data: {"status" => "waiting_for_review", "pr" => 164})
+    assert_raises(RuntimeError) { worker.send(:apply_result, @task, outcome) }
+    @github.pr["number"] = 165
+    @github.pr["mergeable"] = "MERGEABLE"
+    outcome.data["pr"] = 165
+    assert_raises(RuntimeError) { worker.send(:apply_result, @task, outcome) }
+    assert_equal 164, @task.pr_number
+    assert_equal "changes_requested", @task.state
+    assert_empty @github.comments
+  end
+
   def test_reconciliation_recovers_a_review_wait_without_a_retry_or_a_pr
     @task.transition_to("waiting_for_review")
     @engine.reconcile_all

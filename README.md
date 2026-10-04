@@ -297,8 +297,19 @@ waiting for review does not block another issue from starting.
 Each cycle discovers and processes existing PR tasks before triaging issues and running
 tasks without a PR. PR rework, review, merging and finalization take precedence over new
 issue implementation. Human waits and future retries are still respected, so a blocked PR
-does not prevent unrelated issues from progressing. Within each group, tasks retain their
-registration order. Priority does not bypass review, checks or required human verification.
+does not prevent unrelated issues from progressing. Issue tasks retain their registration
+order; PR tasks run in ascending PR number order. Each PR can progress
+through rework, review, merge and finalization in the same cycle, with at most six actions.
+An unchanged state stops that pass; repeated transitions reach the limit and schedule a
+retry. Priority does not bypass review, checks or required human verification.
+
+An open non-draft PR reported as `CONFLICTING` returns to its worker before human testing;
+`UNKNOWN` is not treated as a conflict. Actual human-input blockers and failed-action retry
+times remain respected. Externally discovered PRs get a reserved `.worktrees/pr-N` workspace
+and local `ghwatch/pr-N` branch from their verified GitHub head. The task retains the original
+PR head identity; the worker updates that existing head repository/branch without merging
+or force-pushing. Existing unrelated workspace paths or branches are refused. Workspace
+ownership is persisted so interrupted setup can resume without overwriting local work.
 
 Failures and protocol no-ops get a persisted retry time. A task does not become permanently
 silent merely because a subprocess exited without producing the required ghwatch result.

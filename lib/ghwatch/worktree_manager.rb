@@ -56,7 +56,41 @@ module Ghwatch
       end
 
       git_result("worktree", "prune")
-      delete_branch(task.branch) if task.branch && branch_exists?(task.branch)
+      branch = task.metadata["local_branch"] || task.branch
+      delete_branch(branch) if branch && branch_exists?(branch)
+    end
+
+    def prepare_pull_request(task, pull_request, state:)
+      raise "cannot prepare a PR without its head repository" unless pull_request.dig("headRepository", "nameWithOwner")
+
+      branch = "ghwatch/pr-#{task.pr_number}"
+      path = @project.root.join(@config.worktree_root, "pr-#{task.pr_number}")
+      owned = task.metadata["pr_workspace_path"] == path.to_s && task.metadata["local_branch"] == branch
+      if owned && registered_worktree?(path)
+        raise "PR workspace branch changed: #{path}" unless git("-C", path.to_s, "symbolic-ref", "--short", "HEAD").strip == branch
+
+        task.worktree = path.to_s
+        return
+      end
+      raise "reserved PR workspace or branch already exists: #{path}" if path.exist? || (!owned && branch_exists?(branch))
+
+      FileUtils.mkdir_p(path.dirname)
+      git("fetch", "origin", "refs/pull/#{task.pr_number}/head")
+      head = git("rev-parse", "FETCH_HEAD").strip
+      raise "PR head changed while preparing its workspace; retry" unless head == pull_request.fetch("headRefOid")
+
+      task.branch = pull_request.fetch("headRefName")
+      task.metadata["local_branch"] = branch
+      task.metadata["pr_workspace_path"] = path.to_s
+      task.metadata["pr_head_repository"] = pull_request.dig("headRepository", "nameWithOwner")
+      state.save_task(task)
+      if branch_exists?(branch)
+        git("worktree", "add", path.to_s, branch)
+      else
+        git("worktree", "add", "-b", branch, path.to_s, head)
+      end
+      task.worktree = path.to_s
+      @log.info("[#{task.id}] prepared PR workspace #{path}")
     end
 
     private
