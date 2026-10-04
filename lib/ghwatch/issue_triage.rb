@@ -80,20 +80,7 @@ module Ghwatch
         active_issue_numbers.include?(issue["number"])
       end
 
-      prioritize(candidates).first(@config.candidate_limit)
-    end
-
-    def prioritize(candidates)
-      assessments = @state.assessments
-      candidates.sort_by do |issue|
-        case assessments.dig(issue["number"], :status)
-        when "blocked", "followup" then 0
-        when nil then 1
-        when "ready" then 2
-        when "deferred" then 4
-        else 3
-        end
-      end
+      candidates.first(@config.candidate_limit)
     end
 
     def available_worker_slots

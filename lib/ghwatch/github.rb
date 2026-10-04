@@ -32,7 +32,7 @@ module Ghwatch
       gh_json(
         "issue", "list", "--state", "open", "--limit", limit.to_s,
         "--json", "number,title,updatedAt,url,labels,assignees"
-      )
+      ).sort_by { |issue| issue.fetch("number") }
     end
 
     def issue(number)
@@ -50,7 +50,7 @@ module Ghwatch
       gh_json(
         "pr", "list", "--state", "open", "--limit", limit.to_s,
         "--json", "number,title,body,url,isDraft,headRefName,headRefOid,baseRefName,updatedAt,mergeable,statusCheckRollup"
-      )
+      ).sort_by { |pull_request| pull_request.fetch("number") }
     end
 
     def pull_request(number)

@@ -289,6 +289,11 @@ silent merely because a subprocess exited without producing the required ghwatch
 
 ## Triage
 
+Discovery fetches up to 100 open issues and 100 open pull requests, then processes each
+list in ascending number order (oldest first). Triage takes the oldest eligible issues
+up to `candidate_limit`; previous assessment status does not change that order. The
+triage agent still decides which candidates are ready to implement.
+
 The triage role classifies issues as:
 
 - `ready` — autonomous implementation can start now
