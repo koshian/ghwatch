@@ -10,6 +10,7 @@ module Ghwatch
       @github = github
       @log = log
       @running = true
+      @wakeup_reader, @wakeup_writer = IO.pipe
     end
 
     def run
@@ -18,19 +19,26 @@ module Ghwatch
 
       while @running
         cycle
-        sleep @config.poll_interval if @running
+        wait(@config.poll_interval) if @running
       end
 
       @log.info("ghwatch stopped")
     end
 
     def cycle
-      reload_config_if_changed
-      @task_engine.reconcile_all
-      @review_intake.discover
-      @issue_triage.request_if_watched_issue_changed
-      @issue_triage.run if @issue_triage.due?
-      @task_engine.run_due
+      steps = [
+        -> { reload_config_if_changed },
+        -> { @task_engine.reconcile_all },
+        -> { @review_intake.discover },
+        -> { @issue_triage.request_if_watched_issue_changed },
+        -> { @issue_triage.run if @issue_triage.due? },
+        -> { @task_engine.run_due(stop_requested: -> { !@running }) }
+      ]
+      steps.each do |step|
+        break unless @running
+
+        step.call
+      end
     rescue => e
       @log.error("cycle failed: #{e.class}: #{e.message}")
     end
@@ -43,12 +51,27 @@ module Ghwatch
       @log.error("config reload failed; keeping previous configuration: #{e.message}")
     end
 
+    # Sleeps for the poll interval, but returns as soon as a stop is requested.
+    # A trapped signal does not interrupt Kernel#sleep, so wait on a self-pipe.
+    def wait(seconds)
+      IO.select([@wakeup_reader], nil, nil, seconds)
+    end
+
+    # The first INT/TERM stops ghwatch after the current step. The handler then
+    # restores Ruby's default, so a second one interrupts immediately.
     def trap_signals
       %w[INT TERM].each do |signal|
-        Signal.trap(signal) { @running = false }
+        Signal.trap(signal) { request_stop(signal) }
       rescue ArgumentError
         nil
       end
+    end
+
+    def request_stop(signal)
+      @running = false
+      @wakeup_writer.write_nonblock(".", exception: false)
+      Signal.trap(signal, "DEFAULT")
+      @log.info("stopping after the current step (#{signal} again to quit immediately)")
     end
   end
 end

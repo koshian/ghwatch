@@ -74,6 +74,9 @@ module Ghwatch
     def run_foreground
       components = build_components
       components.fetch(:scheduler).run
+    rescue Interrupt
+      warn "ghwatch interrupted"
+      exit 130
     rescue Project::NotARepository, Config::Error => e
       raise Thor::Error, e.message
     end

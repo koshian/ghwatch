@@ -17,8 +17,9 @@ module Ghwatch
       active_tasks.each { |task| reconcile(task) }
     end
 
-    def run_due
+    def run_due(stop_requested: -> { false })
       active_tasks.each do |task|
+        break if stop_requested.call
         next unless action_due?(task)
 
         case task.state

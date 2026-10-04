@@ -50,6 +50,8 @@ module Ghwatch
         timed_out: timed_out
       )
     ensure
+      # Don't leave an agent running when ghwatch is interrupted mid-command.
+      process.stop if process&.alive?
       stdout_file&.close!
       stderr_file&.close!
     end
