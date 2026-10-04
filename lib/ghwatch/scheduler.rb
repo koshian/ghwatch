@@ -55,6 +55,12 @@ module Ghwatch
     # Sleeps for the poll interval, but returns as soon as a stop is requested.
     # A trapped signal does not interrupt Kernel#sleep, so wait on a self-pipe.
     def wait(seconds)
+      retry_at = @task_engine.next_retry_at
+      if retry_at
+        retry_delay = [retry_at - Time.now.to_i, 1].max
+        seconds = [seconds, retry_delay].min
+      end
+      @log.info("waiting until #{(Time.now + seconds).iso8601} for the next check (#{seconds}s)")
       IO.select([@wakeup_reader], nil, nil, seconds)
     end
 

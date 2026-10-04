@@ -121,6 +121,9 @@ or `ghwatch run --verbose`. The spinner appears only on a terminal; redirected o
 contains agent text without animation. Only output emitted by the agent CLI can be
 displayed: a CLI that buffers its answer will show a spinner until it emits output.
 Normal invocation keeps the concise logs. Verbose display does not change result parsing.
+The spinner runs while an agent subprocess is executing. Between cycles, a log reports
+the next check time; the scheduler wakes at the earlier of the poll interval and the next
+task retry deadline, rather than silently waiting past a retry.
 
 Inspect durable state:
 
@@ -348,6 +351,11 @@ Failures and protocol no-ops get a persisted retry time. A task does not become 
 silent merely because a subprocess exited without producing the required ghwatch result.
 Non-blocking review comments also schedule a retry, and CI/mergeability changes wake pending
 reviews. Check changes alone do not invalidate an accepted review in `ready_to_merge`.
+In `changes_requested`, a new non-ghwatch PR comment after the latest requested-changes
+comment returns the task to review, even during a failed worker's retry delay. This lets
+the reviewer consider new instructions or an environment fix. Each reply is consumed
+once; confirmed conflicts stay with the worker and actual human-input waits retain their
+existing reply channel.
 
 ## Triage
 

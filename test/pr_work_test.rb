@@ -233,4 +233,65 @@ class PrWorkTest < Minitest::Test
     machine.run_due(scope: :pull_requests)
     assert task.done?
   end
+
+  def test_new_pr_reply_resumes_review_despite_worker_retry_and_is_not_replayed
+    task = Ghwatch::Task.for_pr(167)
+    task.state = "changes_requested"
+    task.last_error = "protocol: agent did not emit a ghwatch result"
+    task.retry_at = Time.now.to_i + 3_600
+    pull_request = pr(167).merge("comments" => [
+      {"id" => 1, "body" => "old human reply"},
+      {"id" => 2, "body" => "Prepare environment <!-- ghwatch:changes-requested:marker -->"},
+      {"id" => 3, "body" => "Please review again"}
+    ])
+    github = Github.new([pull_request])
+    reviews = 0
+    reviewer = Action.new do |item|
+      reviews += 1
+      item.transition_to("changes_requested", retry_at: Time.now.to_i + 60)
+    end
+    machine = engine([task], github: github, worker: nil, reviewer: reviewer)
+    machine.reconcile_all
+    assert_equal "waiting_for_review", task.state
+    assert_nil task.last_error
+    assert task.retry_due?
+    machine.run_due
+    assert_equal 1, reviews
+    assert_equal 3, task.metadata["last_rework_reply_id"]
+    machine.reconcile_all
+    assert_equal "changes_requested", task.state
+    refute task.retry_due?
+  end
+
+  def test_old_or_ghwatch_comments_and_conflicts_do_not_interrupt_rework
+    task = Ghwatch::Task.for_pr(167)
+    task.state = "changes_requested"
+    task.retry_at = Time.now.to_i + 3_600
+    pull_request = pr(167).merge("comments" => [
+      {"id" => 1, "body" => "old human reply"},
+      {"id" => 2, "body" => "Fix code <!-- ghwatch:changes-requested:marker -->"},
+      {"id" => 3, "body" => "Automated feedback <!-- ghwatch:review-comment:marker -->"}
+    ])
+    machine = engine([task], github: Github.new([pull_request]), worker: nil)
+    machine.reconcile_all
+    assert_equal "changes_requested", task.state
+    pull_request["comments"] << {"id" => 4, "body" => "review again"}
+    pull_request["mergeable"] = "CONFLICTING"
+    machine.reconcile_all
+    assert_equal "changes_requested", task.state
+    refute task.retry_due?
+  end
+
+  def test_next_retry_excludes_human_waits_and_completed_tasks
+    waiting = Ghwatch::Task.for_pr(164)
+    waiting.state = "waiting_for_human_input"
+    waiting.retry_at = 1
+    done = Ghwatch::Task.for_pr(166)
+    done.state = "done"
+    done.retry_at = 2
+    ready = Ghwatch::Task.for_pr(167)
+    ready.retry_at = 1_100
+    machine = engine([waiting, done, ready], github: nil, worker: nil)
+    assert_equal 1_100, machine.next_retry_at
+  end
 end

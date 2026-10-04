@@ -20,6 +20,10 @@ module Ghwatch
       active_tasks.each { |task| reconcile(task) }
     end
 
+    def next_retry_at
+      active_tasks.reject(&:waiting_for_human?).filter_map(&:retry_at).min
+    end
+
     def run_due(stop_requested: -> { false }, scope: :all)
       raise ArgumentError, "unknown task scope #{scope.inspect}" unless %i[all pull_requests issues].include?(scope)
 
@@ -104,6 +108,7 @@ module Ghwatch
       return if return_conflicting_pr_to_worker(task, pull_request)
 
       resume_after_human_reply(task) if task.waiting_for_human? && @human_channel.reply_received?(task)
+      resume_review_after_rework_reply(task, pull_request)
       schedule_review_when_needed(task, snapshot)
 
       task.last_issue_signature = snapshot.issue_signature
@@ -184,6 +189,28 @@ module Ghwatch
       task.human_marker = nil
       task.metadata.delete("human_conversation_number")
       task.transition_to(resume_state, retry_at: Time.now.to_i)
+    end
+
+    def resume_review_after_rework_reply(task, pull_request)
+      return unless task.state == "changes_requested" && pull_request && pull_request["state"] == "OPEN"
+      return if pull_request["mergeable"] == "CONFLICTING"
+
+      comments = Array(pull_request["comments"])
+      request = comments.select { |comment| comment.fetch("body", "").include?("<!-- ghwatch:changes-requested:") }
+        .max_by { |comment| comment.fetch("id").to_i }
+      return unless request
+
+      last_reply = [request.fetch("id").to_i, task.metadata["last_rework_reply_id"].to_i].max
+      reply = comments.select do |comment|
+        comment.fetch("id").to_i > last_reply && !comment.fetch("body", "").include?(Github::MARKER_PREFIX)
+      end.max_by { |comment| comment.fetch("id").to_i }
+      return unless reply
+
+      @log.info("[#{task.id}] new PR reply after requested changes; returning to review")
+      task.metadata["last_rework_reply_id"] = reply.fetch("id").to_i
+      task.last_review_signature = nil
+      task.clear_retry
+      task.transition_to("waiting_for_review", retry_at: Time.now.to_i)
     end
 
     def schedule_review_when_needed(task, snapshot)

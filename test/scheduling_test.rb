@@ -3,6 +3,7 @@
 require_relative "test_helper"
 require "ostruct"
 require "minitest/mock"
+require "stringio"
 
 class SchedulingTest < Minitest::Test
   def test_cycle_processes_prs_before_issue_triage_and_issue_actions
@@ -59,5 +60,26 @@ class SchedulingTest < Minitest::Test
     engine.run_due
     assert_equal %i[rework issue], events
     worker.verify
+  end
+
+  def test_wait_wakes_at_retry_deadline_and_logs_next_check
+    [[1_100, 100], [999, 1], [nil, 600]].each do |retry_at, expected|
+      log = StringIO.new
+      scheduler = Ghwatch::Scheduler.new(
+        task_engine: OpenStruct.new(next_retry_at: retry_at), review_intake: nil,
+        issue_triage: nil, config: nil, github: nil, log: Ghwatch::Log.new(log)
+      )
+      observed = nil
+      Time.stub(:now, Time.at(1_000)) do
+        IO.stub(:select, ->(readers, writers, errors, timeout) { observed = timeout }) do
+          scheduler.send(:wait, 600)
+        end
+      end
+      assert_equal expected, observed
+      assert_includes log.string, "waiting until"
+      assert_includes log.string, "(#{expected}s)"
+      scheduler.instance_variable_get(:@wakeup_reader).close
+      scheduler.instance_variable_get(:@wakeup_writer).close
+    end
   end
 end
