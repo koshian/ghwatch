@@ -164,7 +164,7 @@ module Ghwatch
 
     def gh(*args)
       result = @command.run("gh", *args, chdir: @project.root, timeout: 300)
-      raise "gh #{args.join(' ')} failed: #{result.text.strip}" unless result.success?
+      raise "gh #{args.join(" ")} failed: #{result.text.strip}" unless result.success?
 
       result.stdout
     end

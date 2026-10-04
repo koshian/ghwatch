@@ -27,7 +27,7 @@ module Ghwatch
 
       task.human_marker = marker
       task.metadata["resume_state"] = resume_state
-      task.state = kind == "human-test" ? "waiting_for_human_test" : "waiting_for_human_input"
+      task.state = (kind == "human-test") ? "waiting_for_human_test" : "waiting_for_human_input"
       task.retry_at = nil
       task
     end

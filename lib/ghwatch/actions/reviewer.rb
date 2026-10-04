@@ -91,7 +91,7 @@ module Ghwatch
         when "retry"
           task.schedule_retry(after: @config.retry_after)
         else
-          raise "unknown review status #{data['status'].inspect}"
+          raise "unknown review status #{data["status"].inspect}"
         end
       end
 

@@ -12,7 +12,7 @@ module Ghwatch
     module_function
 
     def parse(output)
-      bodies = output.to_s.scan(/#{Regexp.escape(START_MARKER)}\s*(\{.*?\})\s*#{Regexp.escape(END_MARKER)}/m).flatten
+      bodies = output.to_s.scan(/#{Regexp.escape(START_MARKER)}\s*(\{.*?\})\s*#{Regexp.escape(END_MARKER)}/mo).flatten
       raise ProtocolError, "agent did not emit a ghwatch result" if bodies.empty?
 
       JSON.parse(bodies.last)
@@ -100,7 +100,7 @@ module Ghwatch
     end
 
     def reviewer_contract(role)
-      deep_option = role.to_s == "reviewer" ? "|deep_review" : ""
+      deep_option = (role.to_s == "reviewer") ? "|deep_review" : ""
       <<~TEXT
         This is a read-only review role. Do not edit files, create commits, push branches,
         create worktrees, or merge the pull request yourself. Return the decision to ghwatch.

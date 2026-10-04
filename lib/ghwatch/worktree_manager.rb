@@ -81,7 +81,7 @@ module Ghwatch
 
     def git(*args)
       result = git_result(*args)
-      raise "git #{args.join(' ')} failed: #{result.text.strip}" unless result.success?
+      raise "git #{args.join(" ")} failed: #{result.text.strip}" unless result.success?
 
       result.stdout
     end

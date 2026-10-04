@@ -87,7 +87,7 @@ module Ghwatch
       return false unless pull_request && pull_request["state"] == "CLOSED" && !pull_request["mergedAt"]
 
       if task.issue_number
-        @log.warn("[#{task.id}] PR ##{pull_request['number']} closed without merge; returning task to worker")
+        @log.warn("[#{task.id}] PR ##{pull_request["number"]} closed without merge; returning task to worker")
         task.pr_number = nil
         task.last_review_signature = nil
         task.transition_to("implementing", retry_at: Time.now.to_i)

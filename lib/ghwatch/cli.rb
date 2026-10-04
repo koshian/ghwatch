@@ -96,7 +96,7 @@ module Ghwatch
       checks = Doctor.new(project: project, config: config, command: command, github: github).checks
 
       checks.each do |check|
-        puts "#{check.ok ? '✓' : '✗'} #{check.name}: #{check.detail}"
+        puts "#{check.ok ? "✓" : "✗"} #{check.name}: #{check.detail}"
       end
 
       exit(1) unless checks.all?(&:ok)

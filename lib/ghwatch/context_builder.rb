@@ -13,7 +13,7 @@ module Ghwatch
         You are triaging GitHub issues for autonomous work.
 
         Available autonomous worker slots: #{available_slots}
-        Human-facing GitHub text should use: #{@config.human_language == "auto" ? "the language already used by the issue/project" : @config.human_language}
+        Human-facing GitHub text should use: #{(@config.human_language == "auto") ? "the language already used by the issue/project" : @config.human_language}
 
         Assess every candidate independently. `ready` means enough is known to implement now.
         Do not mark an issue blocked merely because it is large; blocked is specifically for

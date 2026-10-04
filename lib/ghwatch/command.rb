@@ -28,7 +28,7 @@ module Ghwatch
       process.io.stdout = stdout_file
       process.io.stderr = stderr_file
 
-      @log.info("$ #{argv.join(' ')}") unless quiet
+      @log.info("$ #{argv.join(" ")}") unless quiet
       process.start
 
       timed_out = false

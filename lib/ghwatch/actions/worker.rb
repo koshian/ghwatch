@@ -38,7 +38,6 @@ module Ghwatch
 
       private
 
-
       def no_op_continue?(task, before_snapshot, repository_before, outcome)
         return false unless outcome.data["status"] == "continue"
 
@@ -75,7 +74,7 @@ module Ghwatch
         when "deferred"
           defer(task, data)
         else
-          raise "unknown worker status #{data['status'].inspect}"
+          raise "unknown worker status #{data["status"].inspect}"
         end
       end
 
