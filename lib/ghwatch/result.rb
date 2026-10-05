@@ -123,7 +123,8 @@ module Ghwatch
       deep_option = (role.to_s == "reviewer") ? "|deep_review" : ""
       <<~TEXT
         This is a review role. You may build and run verification in the prepared workspace,
-        creating build outputs, logs and screenshots. Do not edit source, create commits, push branches,
+        creating build outputs, logs and screenshots, and you may start CI or test-build
+        workflows for the PR commit. Do not edit source, create commits, push branches,
         create worktrees, or merge the pull request yourself. Return the decision to ghwatch.
 
         Finish with exactly one result:

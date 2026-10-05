@@ -356,7 +356,13 @@ An existing owned review workspace is updated to that SHA without changing the w
 workspace. Reviewers may build, run tests and use project-provided GUI verification tools
 such as Xvfb; they cannot edit source, commit, push or merge. Review feedback must describe
 the tested SHA, commands, observations and evidence paths. Human requests are limited to
-checks the reviewer cannot perform. Human test requests are posted on the source Issue
+checks the reviewer cannot perform. Reviewers may start CI or test-build workflows for the
+PR commit, so a missing test build does not by itself send the PR back to the worker.
+
+Every review pass completes the code review, even when pending CI or test preparation
+already blocks merge, and reports all blocking problems together. Re-reviews first check
+the previously requested changes and the changes since, raising new findings in unchanged
+code only for real defects within the issue's scope. Human test requests are posted on the source Issue
 with its reporter mentioned, PR and test-build links, the tested SHA, artifact/startup
 instructions, and steps with expected results. Replies are monitored on that Issue.
 PR-only tasks use the PR conversation; existing waits retain their recorded reply channel.

@@ -97,6 +97,19 @@ module Ghwatch
         maintainability, test coverage, and whether the implementation actually satisfies the
         issue. If project policy requires human verification, do not authorize merge until that
         report exists.
+        Complete this code review in every pass, even when another blocker such as pending CI,
+        missing test preparation or a needed test build already prevents merge. Report every
+        blocking problem you find in one result so the worker can fix them in a single round.
+        When earlier ghwatch reviews exist on this PR, first check whether each requested
+        change is resolved, then review what changed since for regressions. Raise new findings
+        in code that did not change only when they are real defects within the issue's scope;
+        put optional improvements in a non-blocking note.
+        You may start the project's CI or test-build workflows for this PR commit yourself,
+        for example with gh workflow run on the PR branch; that is not a source change. When
+        human testing needs a test build of the current commit, start it, wait for it (for
+        example with gh run watch), and link the result in the request instead of returning
+        changes_requested for a missing build. If it cannot finish within this run, return
+        retry so ghwatch reviews again later.
 
         Task state: #{task.state}
         Related issue: #{task.issue_number || "none"}
