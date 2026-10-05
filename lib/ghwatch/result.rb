@@ -132,7 +132,7 @@ module Ghwatch
         #{START_MARKER}
         {
           "status": "merge|changes_requested|waiting_for_human_input|waiting_for_human_test|comment#{deep_option}|retry",
-          "body": "concise human-facing review/comment",
+          "body": "human-facing review in the form the role instructions describe",
           "issue": 123,
           "test_preparation": {
             "commit": "full tested commit SHA",

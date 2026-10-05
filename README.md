@@ -358,6 +358,14 @@ PR head identity; the worker updates that existing head repository/branch withou
 or force-pushing. Existing unrelated workspace paths or branches are refused. Workspace
 ownership is persisted so interrupted setup can resume without overwriting local work.
 
+The normal reviewer first decides whether a PR needs the deep reviewer (subtle state or
+concurrency, untrusted input or other security-sensitive behavior, performance-critical
+paths, architectural changes, hard-to-verify platform behavior) and hands it over before
+running long verification; routine changes it reviews itself. Both reviewers evaluate
+correctness, security, performance, design and tests, and write the review as what is
+good, what is wrong or risky, and concrete improvements, followed by what was checked.
+Project-specific review concerns belong in the project's own instructions (AGENTS.md).
+
 Before normal or deep review, ghwatch checks whether the PR head contains the current head
 of its base branch. If not, it merges the base into the PR on GitHub (the "Update branch"
 API, guarded by the expected head SHA) and reviews the new head on a later pass, so reviews
