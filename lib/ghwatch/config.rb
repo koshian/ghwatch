@@ -113,7 +113,7 @@ module Ghwatch
     end
 
     def merge_method
-      github.fetch("merge_method", "squash")
+      github.fetch("merge_method", "merge")
     end
 
     def human_language(environment: ENV)

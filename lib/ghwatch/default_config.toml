@@ -13,7 +13,7 @@ review_all_open_prs = true
 [github]
 status_labels = true
 auto_merge = true
-merge_method = "squash"
+merge_method = "merge"
 # Merge the base branch into PRs that are behind it before reviewing them.
 update_pr_branches = true
 # Use a language name/tag (e.g. "ja") or infer it from the process environment.

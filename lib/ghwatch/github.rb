@@ -134,7 +134,7 @@ module Ghwatch
       end
     end
 
-    def merge_pull_request(number, method: "squash")
+    def merge_pull_request(number, method: "merge")
       gh("pr", "merge", number.to_s, "--#{method}")
     end
 

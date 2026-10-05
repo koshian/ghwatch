@@ -458,7 +458,7 @@ review_all_open_prs = true
 
 [github]
 auto_merge = true
-merge_method = "squash"
+merge_method = "merge"
 update_pr_branches = true
 human_language = "auto"
 close_issue_after_merge = true
