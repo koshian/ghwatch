@@ -405,6 +405,12 @@ overwritten or deleted. Generated build outputs may be removed with the owned wo
 publish evidence elsewhere if it must remain available after the PR closes. A PR changed
 during review is retried against its new head before accepting the review result.
 
+Agents often start servers, virtual displays and apps that detach into their own
+sessions and outlive the agent. ghwatch marks every agent run with a `GHWATCH_RUN_ID`
+environment variable, which such descendants inherit, and after the run stops (TERM,
+then KILL) every process that still carries the mark. This uses `/proc` and does
+nothing on systems without it.
+
 Failures and protocol no-ops get a persisted retry time. A task does not become permanently
 silent merely because a subprocess exited without producing the required ghwatch result.
 Non-blocking review comments also schedule a retry, and CI/mergeability changes wake pending

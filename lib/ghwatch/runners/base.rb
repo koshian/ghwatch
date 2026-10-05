@@ -21,10 +21,11 @@ module Ghwatch
         end
       end
 
-      def initialize(settings:, command:, log: Log.new)
+      def initialize(settings:, command:, log: Log.new, reaper: ProcessReaper.new(log: log))
         @settings = settings
         @command = command
         @log = log
+        @reaper = reaper
       end
 
       def run(model:, prompt:, cwd:, extra_args: [], progress: nil)
@@ -32,9 +33,14 @@ module Ghwatch
         # Linux's per-argument limit (128KiB) and fail with E2BIG.
         argv = build_argv(model: model, extra_args: extra_args)
         timeout = Duration.seconds(@settings.fetch("timeout", "90m"))
-        options = {chdir: cwd, timeout: timeout, stdin: prompt}
+        mark = @reaper.new_mark
+        options = {chdir: cwd, timeout: timeout, stdin: prompt, env: {ProcessReaper::VARIABLE => mark}}
         options[:progress] = progress if progress
-        result = @command.run(*argv, **options)
+        result = begin
+          @command.run(*argv, **options)
+        ensure
+          @reaper.reap(mark)
+        end
         error_kind = classify(result)
 
         Invocation.new(
