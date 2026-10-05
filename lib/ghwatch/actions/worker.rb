@@ -15,6 +15,7 @@ module Ghwatch
           @worktrees.prepare_pull_request(task, snapshot.pull_request, state: @state)
           @state.save_task(task)
         end
+        @worktrees&.restore_task_worktree(task)
         repository_before = RepositoryState.capture(command: @command, cwd: task.worktree || @project.root)
         context = @context_builder.worker(
           task: task,

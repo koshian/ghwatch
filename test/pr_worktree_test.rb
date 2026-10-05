@@ -158,6 +158,56 @@ class PrWorktreeTest < Minitest::Test
     assert worker_path.join("target").exist?
   end
 
+  def test_review_cleanup_removes_read_only_outputs
+    path = Pathname(@manager.prepare_review(@task, @pr, state: @state))
+    cache = path.join("target/tmp/gopath/pkg/mod/example")
+    cache.mkpath
+    cache.join("go.mod").write("module example\n")
+    FileUtils.chmod(0o444, cache.join("go.mod"))
+    FileUtils.chmod(0o555, cache)
+    @manager.cleanup_review(@task)
+    refute path.exist?
+    refute @task.metadata.key?("review_worktree")
+  end
+
+  def test_review_leftover_after_git_forgot_it_is_removed_and_recreated
+    path = Pathname(@manager.prepare_review(@task, @pr, state: @state))
+    FileUtils.rm_rf(@root.join(".git/worktrees/review-pr-164"))
+    assert_equal path.to_s, @manager.prepare_review(@task, @pr, state: @state)
+    assert_equal @head, git("rev-parse", "HEAD", chdir: path).strip
+
+    FileUtils.rm_rf(@root.join(".git/worktrees/review-pr-164"))
+    @manager.cleanup_review(@task)
+    refute path.exist?
+  end
+
+  def test_review_cleanup_keeps_unrelated_unregistered_directories
+    @manager.prepare_review(@task, @pr, state: @state)
+    path = @root.join(".worktrees/review-pr-164")
+    git("worktree", "remove", "--force", path.to_s)
+    path.mkpath
+    path.join("notes.txt").write("someone else's\n")
+    assert_raises(RuntimeError) { @manager.cleanup_review(@task) }
+    assert_equal "someone else's\n", path.join("notes.txt").read
+  end
+
+  def test_restores_a_removed_task_worktree_with_its_commits
+    @manager.prepare_pull_request(@task, @pr, state: @state)
+    path = Pathname(@task.worktree)
+    path.join("file.txt").write("local repair\n")
+    git("commit", "-am", "Local repair", chdir: path)
+    FileUtils.rm_rf(path)
+    @manager.restore_task_worktree(@task)
+    assert_equal "local repair\n", path.join("file.txt").read
+    assert_equal "ghwatch/pr-164", git("branch", "--show-current", chdir: path).strip
+
+    FileUtils.rm_rf(path)
+    git("worktree", "prune")
+    git("branch", "-D", "ghwatch/pr-164")
+    @manager.restore_task_worktree(@task)
+    assert_equal @head, git("rev-parse", "HEAD", chdir: path).strip
+  end
+
   def test_detects_a_pr_head_behind_its_base
     @pr["baseRefName"] = "master"
     git("push", "origin", "master")

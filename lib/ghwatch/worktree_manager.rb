@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require "fileutils"
+require "find"
 
 module Ghwatch
   class WorktreeManager
@@ -48,14 +49,7 @@ module Ghwatch
       return unless task.worktree
 
       path = Pathname(task.worktree)
-      if path.exist?
-        result = git_result("worktree", "remove", "--force", path.to_s)
-        unless result.success?
-          @log.warn("git worktree remove failed for #{path}; removing reserved ghwatch worktree directory")
-          FileUtils.rm_rf(path)
-        end
-      end
-
+      remove_worktree(path) if path.exist?
       git_result("worktree", "prune")
       branch = task.metadata["local_branch"] || task.branch
       delete_branch(branch) if branch && branch_exists?(branch)
@@ -64,6 +58,7 @@ module Ghwatch
     def prepare_review(task, pull_request, state:)
       path = @project.root.join(@config.worktree_root, "review-pr-#{task.pr_number}")
       owned = task.metadata["review_worktree"] == path.to_s
+      remove_leftover(path) if owned && path.exist? && !registered_worktree?(path)
       registered = registered_worktree?(path)
       raise "reserved review workspace already exists: #{path}" if !owned && (path.exist? || registered)
       verify_review_workspace(path) if registered
@@ -94,13 +89,37 @@ module Ghwatch
       path = @project.root.join(@config.worktree_root, "review-pr-#{task.pr_number}")
       raise "review workspace ownership changed" unless stored_path == path.to_s
 
-      if registered_worktree?(path)
+      if registered_worktree?(path) && path.exist?
         verify_review_workspace(path)
-        git("worktree", "remove", "--force", path.to_s)
+        remove_worktree(path)
       elsif path.exist?
-        raise "review workspace is no longer registered: #{path}"
+        remove_leftover(path)
       end
+      git_result("worktree", "prune")
       task.metadata.delete("review_worktree")
+    end
+
+    # Recreates a task worktree whose directory has gone (removed by hand or
+    # by an interrupted cleanup) from its local branch, or else from the PR
+    # head or the pushed task branch, so the next agent has a workspace again.
+    def restore_task_worktree(task)
+      return unless task.worktree
+
+      path = Pathname(task.worktree)
+      return if path.exist? && registered_worktree?(path)
+      raise "task worktree is outside #{@config.worktree_root}: #{path}" unless inside_worktree_root?(path)
+      raise "task worktree directory exists but is not a registered worktree: #{path}" if path.exist?
+
+      git_result("worktree", "prune")
+      branch = task.metadata["local_branch"] || task.branch
+      FileUtils.mkdir_p(path.dirname)
+      if branch_exists?(branch)
+        git("worktree", "add", path.to_s, branch)
+      else
+        git("fetch", "origin", task.pr_number ? "refs/pull/#{task.pr_number}/head" : task.branch)
+        git("worktree", "add", "-b", branch, path.to_s, "FETCH_HEAD")
+      end
+      @log.info("[#{task.id}] restored missing task worktree #{path} on #{branch}")
     end
 
     # True when the PR head does not contain its base branch's current head,
@@ -177,6 +196,42 @@ module Ghwatch
     def verify_review_workspace(path)
       raise "review workspace is on a branch: #{path}" if git_result("-C", path.to_s, "symbolic-ref", "--quiet", "HEAD").success?
       raise "review workspace has tracked changes: #{path}" unless git("-C", path.to_s, "status", "--porcelain", "--untracked-files=no").strip.empty?
+    end
+
+    # Some tools write read-only files (Go's module cache), which make both
+    # git worktree remove and rm_rf stop halfway; make them writable first.
+    def remove_worktree(path)
+      return if git_result("worktree", "remove", "--force", path.to_s).success?
+
+      make_writable(path)
+      return if git_result("worktree", "remove", "--force", path.to_s).success?
+
+      @log.warn("git worktree remove failed for #{path}; removing reserved ghwatch worktree directory")
+      FileUtils.rm_rf(path)
+      raise "could not remove #{path}" if path.exist?
+    end
+
+    # A directory left after git forgot the worktree. Removed only when its
+    # .git file still names this worktree's (now missing) administrative
+    # directory, so unrelated directories are never deleted.
+    def remove_leftover(path)
+      link = path.join(".git")
+      gitdir = link.file? && link.read[/\Agitdir: (.+)$/, 1]
+      unless gitdir && File.basename(gitdir) == path.basename.to_s &&
+          File.basename(File.dirname(gitdir)) == "worktrees" && !File.exist?(gitdir)
+        raise "review workspace is no longer registered: #{path}"
+      end
+
+      @log.warn("removing leftover of an unregistered ghwatch worktree #{path}")
+      make_writable(path)
+      FileUtils.rm_rf(path)
+    end
+
+    def make_writable(path)
+      Find.find(path.to_s) do |entry|
+        stat = File.lstat(entry)
+        File.chmod(stat.mode | 0o700, entry) if stat.directory?
+      end
     end
 
     def inside_worktree_root?(path)

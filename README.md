@@ -181,6 +181,14 @@ ghwatch/issue-123
 The worktree survives repeated agent invocations. After finalization, ghwatch removes the
 worktree, prunes Git worktree metadata, and removes the local task branch.
 
+If a task worktree directory has disappeared (removed by hand, for example), the worker
+recreates it from the local task branch, or from the PR head or pushed branch when the
+local branch is gone; the finalizer, which edits nothing, runs from the repository root
+instead. Removal makes read-only build outputs (such as Go's module cache) writable when
+`git worktree remove` stops on them. A review workspace directory that Git no longer
+knows about is removed only when its `.git` file still names that workspace's missing
+administrative directory; other directories are refused.
+
 While a task waits for a person (`waiting_for_human_input` or `waiting_for_human_test`),
 ghwatch frees disk space: it removes the review workspace and runs
 `project.human_wait_cleanup` in the task worktree, once per wait. The default,

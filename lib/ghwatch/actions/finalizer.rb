@@ -30,7 +30,9 @@ module Ghwatch
           issue: snapshot.issue,
           pull_request: snapshot.pull_request
         )
-        outcome = @roles.run("finalizer", context: context, cwd: task.worktree || @project.root, task: task)
+        # The finalizer edits nothing; a worktree removed by hand is not needed.
+        cwd = (task.worktree && File.directory?(task.worktree)) ? task.worktree : @project.root
+        outcome = @roles.run("finalizer", context: context, cwd: cwd, task: task)
         remember_outcome(task, outcome)
 
         unless outcome.success?
