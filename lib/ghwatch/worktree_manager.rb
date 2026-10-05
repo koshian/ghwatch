@@ -103,6 +103,23 @@ module Ghwatch
       task.metadata.delete("review_worktree")
     end
 
+    # True when the PR head does not contain its base branch's current head,
+    # so reviewing it would miss newer base changes (including test tools).
+    def behind_base?(task, pull_request)
+      base = pull_request["baseRefName"]
+      return false unless base
+
+      git("fetch", "origin", base)
+      git("fetch", "origin", "refs/pull/#{task.pr_number}/head")
+      head = git("rev-parse", "FETCH_HEAD").strip
+      return false unless head == pull_request.fetch("headRefOid")
+
+      result = git_result("merge-base", "--is-ancestor", "refs/remotes/origin/#{base}", head)
+      raise "git merge-base failed: #{result.text.strip}" unless [0, 1].include?(result.exit_code)
+
+      result.exit_code == 1
+    end
+
     # Frees disk while a person is expected to respond. The review workspace is
     # recreated by the next review; the task worktree keeps its source and commits.
     def release_for_human_wait(task)

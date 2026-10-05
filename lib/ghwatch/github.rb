@@ -138,6 +138,13 @@ module Ghwatch
       gh("pr", "merge", number.to_s, "--#{method}")
     end
 
+    # Merges the base branch into the PR head on GitHub; refused when the head
+    # moved past expected_head or the merge conflicts.
+    def update_pull_request_branch(number, expected_head:)
+      gh("api", "--method", "PUT", "repos/#{repo_name}/pulls/#{number}/update-branch",
+        "-f", "expected_head_sha=#{expected_head}")
+    end
+
     def human_comments_after(number, marker:)
       comments = issue_comments(number)
       marker_comment = comments.find { |comment| comment.fetch("body", "").include?(marker.to_s) }

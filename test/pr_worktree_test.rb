@@ -158,6 +158,21 @@ class PrWorktreeTest < Minitest::Test
     assert worker_path.join("target").exist?
   end
 
+  def test_detects_a_pr_head_behind_its_base
+    @pr["baseRefName"] = "master"
+    git("push", "origin", "master")
+    refute @manager.behind_base?(@task, @pr)
+
+    @root.join("tools.txt").write("newer test tools\n")
+    git("add", "tools.txt")
+    git("commit", "-m", "Add tools")
+    git("push", "origin", "master")
+    assert @manager.behind_base?(@task, @pr)
+
+    @pr["headRefOid"] = "stale-head"
+    refute @manager.behind_base?(@task, @pr)
+  end
+
   def test_review_workspace_rejects_a_stale_snapshot
     @pr["headRefOid"] = "stale-head"
     assert_raises(RuntimeError) { @manager.prepare_review(@task, @pr, state: @state) }

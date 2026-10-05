@@ -14,6 +14,8 @@ review_all_open_prs = true
 status_labels = true
 auto_merge = true
 merge_method = "squash"
+# Merge the base branch into PRs that are behind it before reviewing them.
+update_pr_branches = true
 # Use a language name/tag (e.g. "ja") or infer it from the process environment.
 human_language = "auto"
 close_issue_after_merge = true

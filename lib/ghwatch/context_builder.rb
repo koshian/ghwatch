@@ -51,7 +51,9 @@ module Ghwatch
         When a current PR exists, update that PR rather than creating a replacement. Resolve
         conflicts with its base branch before requesting review. The local workspace branch
         may differ from the PR head branch: push HEAD to the existing PR head branch in its
-        head repository, without force-pushing or changing the base branch. If you cannot
+        head repository, without force-pushing or changing the base branch. Before review
+        ghwatch may merge the base branch into the PR head on GitHub, so fetch the remote
+        PR head and integrate it into your workspace before committing more. If you cannot
         access that repository, return waiting_for_human_input with the specific blocker.
 
         If a human decision, clarification, reproduction detail, or environment-specific answer

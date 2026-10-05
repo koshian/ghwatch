@@ -13,6 +13,8 @@ module Ghwatch
         pull_request = snapshot.pull_request || raise("PR ##{task.pr_number} is unavailable")
         task.issue_number ||= linked_issue_number(pull_request)
         issue = task.issue_number && @github.issue(task.issue_number)
+        return if update_behind_branch(task, pull_request)
+
         workspace = @worktrees.prepare_review(task, pull_request, state: @state)
         context = @context_builder.reviewer(task: task, issue: issue, pull_request: pull_request)
         outcome = @roles.run(role, context: context, cwd: workspace, task: task)
@@ -71,6 +73,29 @@ module Ghwatch
       end
 
       private
+
+      # Reviews the PR as it would merge: a head behind its base is first
+      # updated on GitHub, and the review runs against the new head. A refused
+      # update (conflict, fork permissions) is not retried for the same head,
+      # nor is an update requested twice while GitHub has not applied it yet.
+      def update_behind_branch(task, pull_request)
+        return false unless @config.update_pr_branches?
+
+        head = pull_request.fetch("headRefOid")
+        return false if [task.metadata["branch_update_failed_head"], task.metadata["branch_updated_from"]].include?(head)
+        return false unless @worktrees.behind_base?(task, pull_request)
+
+        @github.update_pull_request_branch(task.pr_number, expected_head: head)
+        @log.info("[#{task.id}] PR ##{task.pr_number} was behind its base; updated it before review")
+        task.metadata["branch_updated_from"] = head
+        task.retry_at = Time.now.to_i
+        @state.save_task(task)
+        true
+      rescue => e
+        @log.warn("[#{task.id}] could not update PR ##{task.pr_number} from its base; reviewing it as is: #{e.message}")
+        task.metadata["branch_update_failed_head"] = head
+        false
+      end
 
       def linked_issue_number(pull_request)
         Array(pull_request["closingIssuesReferences"]).first&.fetch("number", nil)

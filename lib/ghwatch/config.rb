@@ -108,6 +108,10 @@ module Ghwatch
       github.fetch("auto_merge", true)
     end
 
+    def update_pr_branches?
+      github.fetch("update_pr_branches", true)
+    end
+
     def merge_method
       github.fetch("merge_method", "squash")
     end

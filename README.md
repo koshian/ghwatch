@@ -350,7 +350,15 @@ PR head identity; the worker updates that existing head repository/branch withou
 or force-pushing. Existing unrelated workspace paths or branches are refused. Workspace
 ownership is persisted so interrupted setup can resume without overwriting local work.
 
-Before normal or deep review, ghwatch prepares a separate detached worktree at
+Before normal or deep review, ghwatch checks whether the PR head contains the current head
+of its base branch. If not, it merges the base into the PR on GitHub (the "Update branch"
+API, guarded by the expected head SHA) and reviews the new head on a later pass, so reviews
+see what would merge, including newer verification tools on the base branch. A refused
+update, such as a conflict or a fork without maintainer edits, is logged and the PR is
+reviewed as is; the same head is not updated again. Workers are told to integrate the
+remote PR head before committing more. Set `github.update_pr_branches = false` to disable.
+
+Then ghwatch prepares a separate detached worktree at
 `.worktrees/review-pr-N`, fetching the PR head and checking it matches the snapshot SHA.
 An existing owned review workspace is updated to that SHA without changing the worker's
 workspace. Reviewers may build, run tests and use project-provided GUI verification tools
@@ -451,6 +459,7 @@ review_all_open_prs = true
 [github]
 auto_merge = true
 merge_method = "squash"
+update_pr_branches = true
 human_language = "auto"
 close_issue_after_merge = true
 require_green_checks = true
