@@ -157,6 +157,7 @@ module Ghwatch
 
       issue.slice("number", "title", "state", "url", "body", "updatedAt").merge(
         "author" => login(issue["author"]),
+        "authorIsMaintainer" => maintainer(issue["authorAssociation"]),
         "labels" => Array(issue["labels"]).map { |label| label["name"] },
         "assignees" => Array(issue["assignees"]).map { |assignee| login(assignee) },
         "comments" => compact_comments(issue["comments"])
@@ -190,6 +191,11 @@ module Ghwatch
       ).compact
     end
 
+    # nil when GitHub did not say, so agents never mistake unknown for "no".
+    def maintainer(association)
+      association && Github::MAINTAINER_ASSOCIATIONS.include?(association)
+    end
+
     def compact_comments(comments)
       return nil if comments.nil?
 
@@ -197,6 +203,7 @@ module Ghwatch
         {
           "id" => comment["id"],
           "author" => login(comment["user"] || comment["author"]),
+          "authorIsMaintainer" => maintainer(comment["author_association"] || comment["authorAssociation"]),
           "createdAt" => comment["created_at"] || comment["createdAt"],
           "body" => comment["body"]
         }.compact

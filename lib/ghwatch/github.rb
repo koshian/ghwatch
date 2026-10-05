@@ -36,11 +36,18 @@ module Ghwatch
       ).sort_by { |issue| issue.fetch("number") }
     end
 
+    # Associations that may speak for the project: their comments can settle a
+    # decision; anyone else's (including the reporter's) cannot.
+    MAINTAINER_ASSOCIATIONS = %w[OWNER MEMBER COLLABORATOR].freeze
+
     def issue(number)
       gh_json(
         "issue", "view", number.to_s,
         "--json", "number,title,body,state,updatedAt,url,author,labels,assignees"
-      ).merge("comments" => issue_comments(number))
+      ).merge(
+        "authorAssociation" => gh_api("repos/#{repo_name}/issues/#{number}")["author_association"],
+        "comments" => issue_comments(number)
+      )
     end
 
     def issue_comments(number)
@@ -132,6 +139,23 @@ module Ghwatch
         encoded = URI.encode_www_form_component(name).gsub("+", "%20")
         gh("api", "--method", "DELETE", "repos/#{repo_name}/issues/#{number}/labels/#{encoded}")
       end
+    end
+
+    def add_issue_label(number, label, color:, description:)
+      current = gh_api_paginated("repos/#{repo_name}/issues/#{number}/labels?per_page=100").map { |item| item.fetch("name") }
+      return if current.include?(label)
+
+      available = gh_api_paginated("repos/#{repo_name}/labels?per_page=100").map { |item| item.fetch("name") }
+      gh("label", "create", label, "--repo", repo_name, "--color", color, "--description", description) unless available.include?(label)
+      gh("api", "--method", "POST", "repos/#{repo_name}/issues/#{number}/labels", "-f", "labels[]=#{label}")
+    end
+
+    def remove_issue_label(number, label)
+      current = gh_api_paginated("repos/#{repo_name}/issues/#{number}/labels?per_page=100").map { |item| item.fetch("name") }
+      return unless current.include?(label)
+
+      encoded = URI.encode_www_form_component(label).gsub("+", "%20")
+      gh("api", "--method", "DELETE", "repos/#{repo_name}/issues/#{number}/labels/#{encoded}")
     end
 
     def merge_pull_request(number, method: "merge")

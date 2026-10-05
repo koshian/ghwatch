@@ -59,16 +59,21 @@ module Ghwatch
           "assessments": [
             {
               "issue": 123,
-              "status": "ready|blocked|deferred|followup|skip",
+              "status": "ready|blocked|discussion|deferred|followup|skip",
+              "concern": "value|harmful|architecture|other, only for discussion",
               "reason": "short factual reason",
-              "comment": "human-facing clarification request or null"
+              "comment": "human-facing clarification request, discussion points, or null"
             }
           ]
         }
         #{END_MARKER}
 
         selected_issues may contain at most the number of slots stated in the context.
-        A blocked issue needs human information or a human decision now. A deferred issue
+        A blocked issue needs human information or a human decision now. A discussion issue
+        needs a maintainer to decide whether and how to do it; its comment states the concern
+        and the decision needed, with options. Mark it ready only after a maintainer
+        (authorIsMaintainer: true) has settled that; a decision from anyone else, including
+        the reporter, does not count. Use skip when a maintainer declined it. A deferred issue
         is intentionally waiting for a future dependency or event and should not ask the
         human to repeat a decision already recorded. followup means implementation is not
         the next action, but ghwatch should continue watching for a response or verification.

@@ -2,6 +2,8 @@
 
 module Ghwatch
   class IssueTriage
+    DISCUSSION_LABEL = "ghwatch:needs-discussion"
+    QUESTION_STATUSES = %w[blocked discussion].freeze
     def initialize(project:, config:, state:, github:, roles:, worktrees:, context_builder:, log: Log.new)
       @project = project
       @config = config
@@ -70,7 +72,7 @@ module Ghwatch
 
     def watched_assessments
       @state.assessments.select do |_number, assessment|
-        %w[blocked followup].include?(assessment[:status])
+        %w[blocked discussion followup].include?(assessment[:status])
       end
     end
 
@@ -100,6 +102,11 @@ module Ghwatch
         status = assessment["status"].to_s
         reason = assessment["reason"].to_s
         comment = assessment["comment"]&.to_s
+        if status == "discussion" && assessment["concern"] == "harmful" && @config.harmful_issues == "skip"
+          status = "skip"
+          reason = "harmful request skipped by configuration: #{reason}"
+          comment = nil
+        end
 
         if should_post_blocker?(status, comment, previous, reason)
           @github.post_issue_comment(
@@ -118,11 +125,25 @@ module Ghwatch
           comment: comment,
           signature: @github.issue_signature(issue)
         )
+        sync_discussion_label(number, status, previous)
       end
     end
 
+    def sync_discussion_label(number, status, previous)
+      return unless @config.status_labels?
+
+      if status == "discussion"
+        @github.add_issue_label(number, DISCUSSION_LABEL, color: "fbca04",
+          description: "ghwatch: waiting for a maintainer's decision")
+      elsif previous && previous[:status] == "discussion"
+        @github.remove_issue_label(number, DISCUSSION_LABEL)
+      end
+    rescue => e
+      @log.warn("[issue-#{number}] could not sync discussion label: #{e.message}")
+    end
+
     def should_post_blocker?(status, comment, previous, reason)
-      return false unless status == "blocked"
+      return false unless QUESTION_STATUSES.include?(status)
       return false if comment.to_s.strip.empty?
 
       previous.nil? || previous[:reason] != reason || previous[:comment] != comment

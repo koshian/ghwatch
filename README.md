@@ -432,9 +432,23 @@ The triage role classifies issues as:
 
 - `ready` — autonomous implementation can start now
 - `blocked` — a human answer is required now
+- `discussion` — a maintainer must first decide whether and how to do it
 - `deferred` — intentionally waiting for a future dependency/event
 - `followup` — no new implementation now, but human verification or another response is worth watching
 - `skip` — not actionable for ghwatch
+
+Triage asks whether an issue should be done before whether it can be. Proposals of
+doubtful value or outside the project's goals, requests for behavior that could harm users
+or third parties (hidden data collection, weakened security, malware-like behavior), and
+large architectural changes become `discussion`, never `ready`, until a maintainer has
+decided. ghwatch posts the concern and the decision needed once, labels the issue
+`ghwatch:needs-discussion` (removed when the assessment changes; disabled together with
+`github.status_labels`), and triages it again when the discussion changes. Only comments
+by the repository's owner, members and collaborators settle a decision: every issue and
+comment given to agents says whether its author is one (`authorIsMaintainer`), so a
+reporter cannot approve their own request. A maintainer's refusal turns it into `skip`.
+Set `project.harmful_issues = "skip"` to ignore harmful requests silently, like a spam
+filter, instead of putting them in front of a maintainer (the default, `"discussion"`).
 
 A blocked issue may receive a concise clarification request. ghwatch avoids reposting the same
 blocker when the reason and question have not changed.

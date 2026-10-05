@@ -9,6 +9,8 @@ worktree_root = ".worktrees"
 human_wait_cleanup = "git clean -fdX"
 branch_prefix = "ghwatch/issue-"
 review_all_open_prs = true
+# Issues asking for harmful behavior: "discussion" (ask a maintainer) or "skip".
+harmful_issues = "discussion"
 
 [github]
 status_labels = true

@@ -100,6 +100,12 @@ module Ghwatch
       command.strip.empty? ? nil : command
     end
 
+    # "discussion" puts issues asking for harmful behavior in front of a
+    # maintainer; "skip" ignores them silently, like a spam filter.
+    def harmful_issues
+      project.fetch("harmful_issues", "discussion")
+    end
+
     def review_all_open_prs?
       project.fetch("review_all_open_prs", true)
     end
@@ -189,6 +195,7 @@ module Ghwatch
       raise Error, "[project].max_workers must be positive" if max_workers < 1
       raise Error, "[project].candidate_limit must be positive" if candidate_limit < 1
       raise Error, "[project].human_wait_cleanup must be a string" unless project.fetch("human_wait_cleanup", "").is_a?(String)
+      raise Error, "[project].harmful_issues must be discussion or skip" unless %w[discussion skip].include?(harmful_issues)
       language = github.fetch("human_language", "auto")
       unless language.is_a?(String) && !language.strip.empty?
         raise Error, "[github].human_language must be a non-empty language name, language tag, or auto"
