@@ -23,7 +23,12 @@ module Ghwatch
       stdout_file = Tempfile.new("ghwatch-stdout")
       stderr_file = Tempfile.new("ghwatch-stderr")
       process = ChildProcess.build(*argv.map(&:to_s))
-      process.cwd = chdir.to_s if chdir
+      if chdir
+        process.cwd = chdir.to_s
+        # Some agent CLIs (e.g. OpenCode) take their directory from PWD, which
+        # would otherwise still name the directory ghwatch was started from.
+        process.environment["PWD"] = File.expand_path(chdir.to_s)
+      end
       env.each { |key, value| process.environment[key.to_s] = value.to_s }
       process.io.stdout = stdout_file
       process.io.stderr = stderr_file
