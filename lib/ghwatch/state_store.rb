@@ -58,14 +58,14 @@ module Ghwatch
       row && deserialize_assessment(row)
     end
 
-    def save_assessment(number, status:, reason:, comment:, signature:)
+    def save_assessment(number, status:, reason:, comment:, signature:, at: Time.now.to_i)
       row = {
         issue_number: number,
         status: status,
         reason: reason,
         comment: comment,
         issue_signature: signature,
-        updated_at: Time.now.to_i
+        updated_at: at
       }
 
       if @db[:issue_assessments].where(issue_number: number).first

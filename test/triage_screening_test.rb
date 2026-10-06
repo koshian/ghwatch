@@ -36,9 +36,9 @@ class TriageScreeningTest < Minitest::Test
 
     def assessment(number) = @assessments[number]
 
-    def save_assessment(number, status:, reason:, comment:, signature:)
+    def save_assessment(number, status:, reason:, comment:, signature:, at: Time.now.to_i)
       @assessments[number] = {status: status, reason: reason, comment: comment,
-                              issue_signature: signature, updated_at: Time.now.to_i}
+                              issue_signature: signature, updated_at: at}
     end
 
     def backdate(number, seconds) = @assessments[number][:updated_at] -= seconds
@@ -139,6 +139,21 @@ class TriageScreeningTest < Minitest::Test
     @state.backdate(2, 2 * 86_400)
     triage(roles, client).run
     assert_equal [1, 2, 3, 1, 2], client.calls
+  end
+
+  def test_a_merge_while_triage_was_running_is_not_missed
+    client = Client.new(1 => ["deferred", 0.95], 2 => ["deferred", 0.95], 3 => ["deferred", 0.95])
+    roles = Roles.new { |numbers| assessed(numbers) }
+    github = @github
+    # The PR merges after triage began but before its answer is saved.
+    github.define_singleton_method(:open_pull_requests) do
+      github.merged_at = Time.now.to_i
+      [{"number" => 172, "title" => "Start at login"}]
+    end
+    triage(roles, client).run
+    assert_operator @state.assessment(1)[:updated_at], :<=, github.merged_at
+    triage(roles, client).run
+    assert_equal [1, 2, 3, 1, 2, 3], client.calls
   end
 
   def test_unchanged_ready_issues_start_when_a_slot_opens

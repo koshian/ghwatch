@@ -43,6 +43,9 @@ module Ghwatch
     end
 
     def run
+      # Assessments are stamped with when the run started: a PR merged while
+      # the model was thinking may not be in what it saw.
+      @started_at = Time.now.to_i
       candidates = candidate_issues
       if candidates.empty?
         mark_complete
@@ -89,7 +92,7 @@ module Ghwatch
 
       # What a deferred issue waits for is usually a merge elsewhere.
       merged_at = last_merged_at
-      merged_at.nil? || merged_at <= previous[:updated_at].to_i
+      merged_at.nil? || merged_at < previous[:updated_at].to_i
     end
 
     def last_merged_at
@@ -115,11 +118,13 @@ module Ghwatch
         prior = previous[number]
         reason = (prior && prior[:status] == decision[:status]) ? prior[:reason] : "settled by #{decision[:model]} screening"
         @state.save_assessment(number, status: decision[:status], reason: reason, comment: nil,
-          signature: @github.issue_signature(issue))
+          signature: @github.issue_signature(issue), at: assessed_at)
         sync_discussion_label(number, decision[:status], prior)
         true
       end
     end
+
+    def assessed_at = @started_at || Time.now.to_i
 
     def watched_assessments
       @state.assessments.select do |_number, assessment|
@@ -174,7 +179,8 @@ module Ghwatch
           status: status,
           reason: reason,
           comment: comment,
-          signature: @github.issue_signature(issue)
+          signature: @github.issue_signature(issue),
+          at: assessed_at
         )
         sync_discussion_label(number, status, previous)
       end

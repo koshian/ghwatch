@@ -31,7 +31,7 @@ class TriageDiscussionTest < Minitest::Test
 
     def assessment(number) = @assessments[number]
 
-    def save_assessment(number, status:, reason:, comment:, signature:)
+    def save_assessment(number, status:, reason:, comment:, signature:, at: nil)
       @assessments[number] = {status: status, reason: reason, comment: comment}
     end
   end
