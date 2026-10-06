@@ -106,6 +106,20 @@ module Ghwatch
       project.fetch("harmful_issues", "discussion")
     end
 
+    def triage
+      data.fetch("triage", {})
+    end
+
+    # An issue unchanged since its last assessment is not judged again until
+    # this much time has passed (deferred ones also after any merge).
+    def reassess_after
+      Duration.seconds(triage.fetch("reassess_after", "1d"))
+    end
+
+    def screening
+      triage.fetch("screening", {})
+    end
+
     def review_all_open_prs?
       project.fetch("review_all_open_prs", true)
     end
@@ -196,6 +210,9 @@ module Ghwatch
       raise Error, "[project].candidate_limit must be positive" if candidate_limit < 1
       raise Error, "[project].human_wait_cleanup must be a string" unless project.fetch("human_wait_cleanup", "").is_a?(String)
       raise Error, "[project].harmful_issues must be discussion or skip" unless %w[discussion skip].include?(harmful_issues)
+      reassess_after
+      confidence = screening.fetch("min_confidence", 0.8)
+      raise Error, "[triage.screening].min_confidence must be between 0 and 1" unless confidence.is_a?(Numeric) && confidence.between?(0, 1)
       language = github.fetch("human_language", "auto")
       unless language.is_a?(String) && !language.strip.empty?
         raise Error, "[github].human_language must be a non-empty language name, language tag, or auto"

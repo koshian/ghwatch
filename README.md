@@ -444,6 +444,20 @@ The triage role classifies issues as:
 - `followup` — no new implementation now, but human verification or another response is worth watching
 - `skip` — not actionable for ghwatch
 
+Triage runs in up to three stages and skips work it has already done:
+
+1. An issue unchanged since its last assessment is not judged again until
+   `triage.reassess_after` (default `1d`) has passed. A `deferred` issue is also judged
+   again after any PR merge, since that is usually what it waits for. An unchanged
+   `ready` issue starts as soon as a worker slot opens.
+2. With `[triage.screening]` enabled, a decision model (TypeSafe Jev, `POST /v1/systemone`)
+   judges each changed issue. Only a confident (`min_confidence`, default 0.8) `deferred`,
+   `followup` or `skip` is settled there; issues it would start or comment on, issues with
+   a `blocked` or `discussion` conversation under way, and large issues go on. If the API
+   key (`TYPESAFE_API_KEY` by default) is missing or the call fails, everything goes on.
+   Screening is off by default because the API is paid and needs a key.
+3. The triage role (an LLM, with model fallbacks as for any role) judges the rest.
+
 Triage asks whether an issue should be done before whether it can be. Proposals of
 doubtful value or outside the project's goals, requests for behavior that could harm users
 or third parties (hidden data collection, weakened security, malware-like behavior), and

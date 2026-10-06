@@ -23,6 +23,20 @@ human_language = "auto"
 close_issue_after_merge = true
 require_green_checks = true
 
+[triage]
+# Issues unchanged since their last assessment are not judged again until
+# this long has passed; deferred ones are also judged again after a merge.
+reassess_after = "1d"
+
+[triage.screening]
+# A decision model (TypeSafe Jev) settles issues that need no action now
+# (deferred, followup, skip) when it is confident; the rest go to the LLM.
+# Needs a TypeSafe API key in the environment variable named below.
+enabled = false
+model = "jev-latest"
+api_key_env = "TYPESAFE_API_KEY"
+min_confidence = 0.8
+
 [runners.claude]
 command = "claude"
 timeout = "90m"
@@ -40,7 +54,12 @@ prompt = "triage.md"
 
 [[roles.triage.models]]
 runner = "opencode"
-model = "opencode-go/mimo-v2.6-flash"
+model = "openai/gpt-6-luna"
+fallback_on = ["capacity", "quota"]
+
+[[roles.triage.models]]
+runner = "claude"
+model = "sonnet"
 
 [roles.worker]
 prompt = "worker.md"

@@ -3,6 +3,7 @@
 require "digest"
 require "json"
 require "securerandom"
+require "time"
 require "uri"
 
 module Ghwatch
@@ -52,6 +53,12 @@ module Ghwatch
 
     def issue_comments(number)
       gh_api_paginated("repos/#{repo_name}/issues/#{number}/comments?per_page=100")
+    end
+
+    # When the most recent merge happened, as epoch seconds (nil if none).
+    def last_merged_at
+      gh_json("pr", "list", "--state", "merged", "--limit", "20", "--json", "mergedAt")
+        .filter_map { |pr| pr["mergedAt"] && Time.parse(pr["mergedAt"]).to_i }.max
     end
 
     def open_pull_requests(limit: 100)

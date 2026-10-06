@@ -4,7 +4,7 @@ module Ghwatch
   class IssueTriage
     DISCUSSION_LABEL = "ghwatch:needs-discussion"
     QUESTION_STATUSES = %w[blocked discussion].freeze
-    def initialize(project:, config:, state:, github:, roles:, worktrees:, context_builder:, log: Log.new)
+    def initialize(project:, config:, state:, github:, roles:, worktrees:, context_builder:, log: Log.new, screening: nil)
       @project = project
       @config = config
       @state = state
@@ -13,6 +13,7 @@ module Ghwatch
       @worktrees = worktrees
       @context_builder = context_builder
       @log = log
+      @screening = screening || IssueScreening.new(config: config, log: log)
       @force = true
     end
 
@@ -51,24 +52,74 @@ module Ghwatch
       details = candidates.map { |summary| @github.issue(summary["number"]) }
       available_slots = available_worker_slots
       previous = details.to_h { |issue| [issue["number"], @state.assessment(issue["number"])] }
-      context = @context_builder.triage(
-        candidates: details,
-        available_slots: available_slots,
-        previous_assessments: previous
-      )
 
-      outcome = @roles.run("triage", context: context, cwd: @project.root)
-      unless outcome.success?
-        @log.warn("triage failed; will retry later")
-        return
+      unchanged, changed = details.partition { |issue| unchanged?(issue, previous[issue["number"]]) }
+      @log.info("triage: #{unchanged.size} unchanged issue(s) kept as assessed") unless unchanged.empty?
+      changed = screen(changed, previous)
+
+      selected = []
+      unless changed.empty?
+        context = @context_builder.triage(
+          candidates: changed,
+          available_slots: available_slots,
+          previous_assessments: changed.to_h { |issue| [issue["number"], previous[issue["number"]]] }
+        )
+        outcome = @roles.run("triage", context: context, cwd: @project.root)
+        unless outcome.success?
+          @log.warn("triage failed; will retry later")
+          return
+        end
+
+        save_assessments(outcome, changed)
+        selected = selected_issues(outcome)
       end
 
-      save_assessments(outcome, details)
-      start_selected_issues(outcome, available_slots)
+      # Issues already judged ready but not started for lack of a slot.
+      ready = unchanged.map { |issue| issue["number"] }.select { |number| previous[number]&.fetch(:status) == "ready" }
+      start_issues((selected + ready).uniq.first(available_slots))
       mark_complete
     end
 
     private
+
+    def unchanged?(issue, previous)
+      return false unless previous && previous[:issue_signature] == @github.issue_signature(issue)
+      return false if Time.now.to_i - previous[:updated_at].to_i >= @config.reassess_after
+      return true unless previous[:status] == "deferred"
+
+      # What a deferred issue waits for is usually a merge elsewhere.
+      merged_at = last_merged_at
+      merged_at.nil? || merged_at <= previous[:updated_at].to_i
+    end
+
+    def last_merged_at
+      return @last_merged_at if defined?(@last_merged_at)
+
+      @last_merged_at = begin
+        @github.last_merged_at
+      rescue => e
+        @log.warn("could not read the latest merge time: #{e.message}")
+        Time.now.to_i
+      end
+    end
+
+    # Saves what the decision model settles and returns the rest.
+    def screen(issues, previous)
+      return issues unless @screening.enabled? && !issues.empty?
+
+      settled = @screening.settle(issues, open_pull_requests: @github.open_pull_requests, previous: previous)
+      issues.reject do |issue|
+        number = issue["number"]
+        decision = settled[number] or next false
+
+        prior = previous[number]
+        reason = (prior && prior[:status] == decision[:status]) ? prior[:reason] : "settled by #{decision[:model]} screening"
+        @state.save_assessment(number, status: decision[:status], reason: reason, comment: nil,
+          signature: @github.issue_signature(issue))
+        sync_discussion_label(number, decision[:status], prior)
+        true
+      end
+    end
 
     def watched_assessments
       @state.assessments.select do |_number, assessment|
@@ -149,13 +200,15 @@ module Ghwatch
       previous.nil? || previous[:reason] != reason || previous[:comment] != comment
     end
 
-    def start_selected_issues(outcome, available_slots)
+    def selected_issues(outcome)
       assessments = Array(outcome.data["assessments"])
-      selected = Array(outcome.data["selected_issues"]).map(&:to_i).uniq.first(available_slots)
+      Array(outcome.data["selected_issues"]).map(&:to_i).uniq.select do |number|
+        assessments.any? { |item| item["issue"].to_i == number && item["status"] == "ready" }
+      end
+    end
 
-      selected.each do |number|
-        assessment = assessments.find { |item| item["issue"].to_i == number }
-        next unless assessment && assessment["status"] == "ready"
+    def start_issues(numbers)
+      numbers.each do |number|
         next if @state.task_for_issue(number)
 
         start_issue(number)
