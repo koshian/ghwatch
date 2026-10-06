@@ -226,6 +226,10 @@ module Ghwatch
       )
     end
 
+    def checks_pending?(pr)
+      Array(pr["statusCheckRollup"]).any? { |check| check["status"].to_s.upcase != "COMPLETED" }
+    end
+
     def checks_green?(pr)
       checks = Array(pr["statusCheckRollup"])
       return false if checks.empty?

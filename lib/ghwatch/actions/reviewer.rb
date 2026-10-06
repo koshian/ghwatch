@@ -14,6 +14,7 @@ module Ghwatch
         task.issue_number ||= linked_issue_number(pull_request)
         issue = task.issue_number && @github.issue(task.issue_number)
         return if update_behind_branch(task, pull_request)
+        return if skip_repeat_review(task, snapshot, pull_request)
 
         workspace = @worktrees.prepare_review(task, pull_request, state: @state)
         context = @context_builder.reviewer(task: task, issue: issue, pull_request: pull_request)
@@ -125,6 +126,7 @@ module Ghwatch
       def apply_result(task, pull_request, outcome)
         data = outcome.data
         initial_signature = @github.review_signature(pull_request)
+        task.metadata.delete("commented_review")
 
         case data["status"]
         when "merge"
@@ -148,6 +150,7 @@ module Ghwatch
         when "comment"
           post_review_body(task, data.fetch("body"), outcome, kind: "review-comment")
           task.last_review_signature = refreshed_review_signature(task, fallback: initial_signature)
+          remember_comment(task, pull_request)
           task.state = "waiting_for_review"
           task.schedule_retry(after: @config.retry_after)
         when "retry"
@@ -166,6 +169,35 @@ module Ghwatch
           kind: kind,
           model_signature: outcome.signature
         )
+      end
+
+      # A non-blocking comment changes nothing by itself, so reviewing the same
+      # head again only repeats it. Wait for something to change instead: new
+      # activity on the PR, or, while checks are still running, their end.
+      def skip_repeat_review(task, snapshot, pull_request)
+        last = task.metadata["commented_review"]
+        return false unless last && last["head"] == pull_request["headRefOid"]
+
+        unchanged = last["review"] == snapshot.review_signature && last["pr"] == snapshot.pull_request_signature
+        pending = @config.reviewer_requires_green_checks? && @github.checks_pending?(pull_request)
+        return false unless unchanged || pending
+
+        @log.info("[#{task.id}] PR ##{task.pr_number} already reviewed at this head; waiting for " \
+          "#{unchanged ? "new activity" : "its checks to finish"}")
+        task.schedule_retry(after: @config.retry_after)
+        @state.save_task(task)
+        true
+      end
+
+      def remember_comment(task, pull_request)
+        snapshot = TaskSnapshot.capture(task: task, github: @github)
+        task.metadata["commented_review"] = {
+          "head" => pull_request["headRefOid"],
+          "review" => snapshot.review_signature,
+          "pr" => snapshot.pull_request_signature
+        }
+      rescue => e
+        @log.warn("[#{task.id}] could not remember the review comment: #{e.message}")
       end
 
       def refreshed_review_signature(task, fallback:)

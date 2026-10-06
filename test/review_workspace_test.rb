@@ -142,6 +142,54 @@ class ReviewWorkspaceTest < Minitest::Test
     roles.verify
   end
 
+  def test_a_commented_head_is_not_reviewed_again_until_something_changes
+    worktrees = Minitest::Mock.new
+    worktrees.expect(:prepare_review, "/review/pr-167") { |task, pr, **options| true }
+    def @config.reviewer_requires_green_checks? = true
+    @github.pull_request_data["statusCheckRollup"] = [{"name" => "ci", "status" => "IN_PROGRESS", "conclusion" => ""}]
+    reviewer_with(worktrees, review_roles("comment")).run(@task)
+    assert @task.metadata["commented_review"]
+
+    # Same head, nothing new, and again after the checks move on but are not done.
+    skipped = Minitest::Mock.new
+    @github.pull_request_data["statusCheckRollup"] = [
+      {"name" => "ci", "status" => "COMPLETED", "conclusion" => "SUCCESS"},
+      {"name" => "win", "status" => "IN_PROGRESS", "conclusion" => ""}
+    ]
+    @task.clear_retry
+    reviewer_with(worktrees, skipped).run(@task)
+    refute @task.retry_due?
+    skipped.verify
+
+    # Checks finished: one more review of the same head.
+    @github.pull_request_data["statusCheckRollup"] = [{"name" => "ci", "status" => "COMPLETED", "conclusion" => "SUCCESS"}]
+    worktrees.expect(:prepare_review, "/review/pr-167") { |task, pr, **options| true }
+    roles = review_roles("merge")
+    reviewer_with(worktrees, roles).run(@task)
+    roles.verify
+    refute @task.metadata.key?("commented_review")
+  end
+
+  def test_a_commented_head_with_no_new_activity_is_not_reviewed_again
+    worktrees = Minitest::Mock.new
+    worktrees.expect(:prepare_review, "/review/pr-167") { |task, pr, **options| true }
+    def @config.reviewer_requires_green_checks? = true
+    @github.pull_request_data["statusCheckRollup"] = [{"name" => "ci", "status" => "COMPLETED", "conclusion" => "SUCCESS"}]
+    reviewer_with(worktrees, review_roles("comment")).run(@task)
+
+    skipped = Minitest::Mock.new
+    @task.clear_retry
+    reviewer_with(worktrees, skipped).run(@task)
+    refute @task.retry_due?
+    skipped.verify
+
+    @github.pull_request_data["headRefOid"] = "pushed-head"
+    worktrees.expect(:prepare_review, "/review/pr-167") { |task, pr, **options| true }
+    roles = review_roles("comment")
+    reviewer_with(worktrees, roles).run(@task)
+    roles.verify
+  end
+
   private
 
   def reviewer_with(worktrees, roles)

@@ -151,9 +151,12 @@ module Ghwatch
         #{END_MARKER}
 
         merge means the change is acceptable and all required human verification is already
-        satisfied. changes_requested must explain actionable blocking problems.
+        satisfied; non-blocking suggestions belong in a merge review's body and are no reason
+        to choose comment instead. changes_requested must explain actionable blocking problems.
         waiting_for_human_test must contain precise test instructions in body and identify
-        the related issue when known. comment is non-blocking and does not authorize merge.
+        the related issue when known. comment is for a review that cannot decide yet and does
+        not authorize merge; the same head is not reviewed again until something changes.
+        While required CI checks are still running, do not post a review: return retry.
 
         For development-environment blockers such as missing OS packages, use
         waiting_for_human_input, not changes_requested or waiting_for_human_test. In body,
