@@ -208,6 +208,26 @@ class PrWorktreeTest < Minitest::Test
     assert_equal @head, git("rev-parse", "HEAD", chdir: path).strip
   end
 
+  def test_tracked_changes_in_a_review_workspace_are_recorded_not_reverted
+    path = Pathname(@manager.prepare_review(@task, @pr, state: @state))
+    refute @manager.record_workspace_changes(@task, trigger: "after the reviewer run (test)")
+
+    path.join("file.txt").delete
+    assert @manager.record_workspace_changes(@task, trigger: "after the reviewer run (test)")
+    refute @manager.record_workspace_changes(@task, trigger: "at ghwatch startup")
+    record = @task.metadata["workspace_changes"].last
+    assert_equal [" D file.txt"], record["files"]
+    assert_equal "after the reviewer run (test)", record["trigger"]
+    refute path.join("file.txt").exist?
+
+    7.times do |index|
+      path.join("extra-#{index}.txt").write("x")
+      git("add", "extra-#{index}.txt", chdir: path)
+      @manager.record_workspace_changes(@task, trigger: "run #{index}")
+    end
+    assert_equal Ghwatch::WorktreeManager::WORKSPACE_CHANGE_RECORDS, @task.metadata["workspace_changes"].size
+  end
+
   def test_detects_a_pr_head_behind_its_base
     @pr["baseRefName"] = "master"
     git("push", "origin", "master")

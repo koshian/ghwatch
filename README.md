@@ -405,6 +405,13 @@ overwritten or deleted. Generated build outputs may be removed with the owned wo
 publish evidence elsewhere if it must remain available after the PR closes. A PR changed
 during review is retried against its new head before accepting the review result.
 
+Reviewers must not change tracked files. After every review run, and when ghwatch starts,
+ghwatch checks each review workspace for tracked changes and, when it finds some, records
+the time, what had just happened (which role and model ran, or the startup) and the changed
+files on the task, keeping the latest five. Nothing is reverted, so the evidence stays;
+the review stops as before until a person has looked. `ghwatch status` shows each active
+task's last error and latest workspace change.
+
 Agents often start servers, virtual displays and apps that detach into their own
 sessions and outlive the agent. ghwatch marks every agent run with a `GHWATCH_RUN_ID`
 environment variable, which such descendants inherit, and after the run stops (TERM,

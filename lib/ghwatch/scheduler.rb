@@ -17,6 +17,9 @@ module Ghwatch
     def run
       trap_signals
       @log.info("ghwatch started for #{@github.repo_name}")
+      # Changes found here happened while ghwatch was not running, e.g. an
+      # interrupted git command.
+      @task_engine.audit_review_workspaces(trigger: "at ghwatch startup")
 
       while @running
         cycle

@@ -43,7 +43,7 @@ class ReviewWorkspaceTest < Minitest::Test
     reviewer = Ghwatch::Actions::Reviewer.new(
       worktrees: worktrees, project: nil, config: @config, state: @state,
       github: @github, roles: roles, context_builder: Ghwatch::ContextBuilder.new(config: @config),
-      human_channel: nil, issue_triage: nil
+      human_channel: nil, issue_triage: nil, log: Ghwatch::Log.new(StringIO.new)
     )
     reviewer.run(@task)
     assert_equal "waiting_for_review", @task.state
@@ -96,7 +96,7 @@ class ReviewWorkspaceTest < Minitest::Test
     reviewer = Ghwatch::Actions::Reviewer.new(
       worktrees: worktrees, project: nil, config: @config, state: @state,
       github: @github, roles: roles, context_builder: Ghwatch::ContextBuilder.new(config: @config),
-      human_channel: nil, issue_triage: nil
+      human_channel: nil, issue_triage: nil, log: Ghwatch::Log.new(StringIO.new)
     )
     reviewer.run(@task)
     assert_equal "ready_to_merge", @task.state

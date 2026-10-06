@@ -2,9 +2,12 @@
 
 require "fileutils"
 require "find"
+require "time"
 
 module Ghwatch
   class WorktreeManager
+    WORKSPACE_CHANGE_RECORDS = 5
+
     def initialize(project:, config:, github:, command:, log: Log.new)
       @project = project
       @config = config
@@ -97,6 +100,25 @@ module Ghwatch
       end
       git_result("worktree", "prune")
       task.metadata.delete("review_worktree")
+    end
+
+    # Reviewers must not change tracked files, yet review workspaces have been
+    # found with some deleted. Each finding is kept on the task (newest last,
+    # with what had just happened) so the cause can be traced; nothing is
+    # reverted, since that would erase the evidence.
+    def record_workspace_changes(task, trigger:)
+      path = task.metadata["review_worktree"] && Pathname(task.metadata["review_worktree"])
+      return false unless path&.exist? && registered_worktree?(path)
+
+      files = git("-C", path.to_s, "status", "--porcelain", "--untracked-files=no").lines.map(&:chomp)
+      records = Array(task.metadata["workspace_changes"])
+      return false if files.empty? || records.last&.fetch("files", nil) == files
+
+      records << {"at" => Time.now.utc.iso8601, "trigger" => trigger, "files" => files}
+      task.metadata["workspace_changes"] = records.last(WORKSPACE_CHANGE_RECORDS)
+      @log.warn("[#{task.id}] review workspace #{path} has tracked changes #{trigger}: #{files.first(5).map(&:strip).join(", ")}" \
+        "#{", ..." if files.size > 5}")
+      true
     end
 
     # Recreates a task worktree whose directory has gone (removed by hand or

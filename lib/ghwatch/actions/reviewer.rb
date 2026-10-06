@@ -19,6 +19,7 @@ module Ghwatch
         context = @context_builder.reviewer(task: task, issue: issue, pull_request: pull_request)
         outcome = @roles.run(role, context: context, cwd: workspace, task: task)
         remember_outcome(task, outcome)
+        record_workspace_changes(task, "after the #{role} run (#{outcome.signature})")
 
         unless outcome.success?
           retry_failed_role(task, outcome)
@@ -95,6 +96,12 @@ module Ghwatch
         @log.warn("[#{task.id}] could not update PR ##{task.pr_number} from its base; reviewing it as is: #{e.message}")
         task.metadata["branch_update_failed_head"] = head
         false
+      end
+
+      def record_workspace_changes(task, trigger)
+        @worktrees.record_workspace_changes(task, trigger: trigger)
+      rescue => e
+        @log.warn("[#{task.id}] could not check the review workspace: #{e.message}")
       end
 
       def linked_issue_number(pull_request)

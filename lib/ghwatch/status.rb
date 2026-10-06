@@ -25,9 +25,18 @@ module Ghwatch
         pr = task.pr_number ? " PR ##{task.pr_number}" : ""
         retry_text = task.retry_at ? " retry=#{Time.at(task.retry_at).iso8601}" : ""
         @io.puts(format("%-10s %-24s%s%s", subject, task.state, pr, retry_text))
+        next if task.done?
+
+        @io.puts("           error: #{task.last_error.lines.first.strip}") if task.last_error
+        change = Array(task.metadata["workspace_changes"]).last
+        if change
+          files = change["files"]
+          more = (files.size > 3) ? " (+#{files.size - 3} more)" : ""
+          @io.puts("           review workspace changed #{change["trigger"]} at #{change["at"]}: #{files.first(3).map(&:strip).join(", ")}#{more}")
+        end
       end
 
-      ready = assessments.select { |_number, item| %w[ready blocked deferred followup].include?(item[:status]) }
+      ready = assessments.select { |_number, item| %w[ready blocked discussion deferred followup].include?(item[:status]) }
       return if ready.empty?
 
       @io.puts

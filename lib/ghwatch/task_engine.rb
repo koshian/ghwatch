@@ -20,6 +20,14 @@ module Ghwatch
       active_tasks.each { |task| reconcile(task) }
     end
 
+    def audit_review_workspaces(trigger:)
+      active_tasks.each do |task|
+        @state.save_task(task) if @worktrees&.record_workspace_changes(task, trigger: trigger)
+      rescue => e
+        @log.warn("[#{task.id}] could not check the review workspace: #{e.message}")
+      end
+    end
+
     def next_retry_at
       active_tasks.reject(&:waiting_for_human?).filter_map(&:retry_at).min
     end
