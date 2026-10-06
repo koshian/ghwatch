@@ -60,6 +60,11 @@ prompt = "reviewer.md"
 [[roles.reviewer.models]]
 runner = "opencode"
 model = "openai/gpt-6-luna"
+fallback_on = ["capacity", "quota"]
+
+[[roles.reviewer.models]]
+runner = "claude"
+model = "sonnet"
 
 [roles.deep_reviewer]
 prompt = "deep_reviewer.md"
@@ -67,6 +72,11 @@ prompt = "deep_reviewer.md"
 [[roles.deep_reviewer.models]]
 runner = "opencode"
 model = "openai/gpt-6.1-sol"
+fallback_on = ["capacity", "quota"]
+
+[[roles.deep_reviewer.models]]
+runner = "claude"
+model = "opus"
 
 [roles.finalizer]
 prompt = "finalizer.md"
