@@ -88,6 +88,7 @@ module Ghwatch
 
         @github.update_pull_request_branch(task.pr_number, expected_head: head)
         @log.info("[#{task.id}] PR ##{task.pr_number} was behind its base; updated it before review")
+        wait_for_new_head(task.pr_number, head)
         task.metadata["branch_updated_from"] = head
         task.retry_at = Time.now.to_i
         @state.save_task(task)
@@ -97,6 +98,19 @@ module Ghwatch
         task.metadata["branch_update_failed_head"] = head
         false
       end
+
+      # GitHub applies the update asynchronously; reviewing before the new head
+      # appears would review the old one and be discarded.
+      def wait_for_new_head(number, head)
+        deadline = Time.now + branch_update_wait
+        while Time.now < deadline
+          return if @github.pull_request(number)&.fetch("headRefOid", head) != head
+
+          sleep 2
+        end
+      end
+
+      def branch_update_wait = 60
 
       def record_workspace_changes(task, trigger)
         @worktrees.record_workspace_changes(task, trigger: trigger)

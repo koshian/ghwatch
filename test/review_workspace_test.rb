@@ -113,6 +113,7 @@ class ReviewWorkspaceTest < Minitest::Test
     worktrees = Minitest::Mock.new
     worktrees.expect(:behind_base?, true) { |task, pr| task == @task && pr["headRefOid"] == "tested-head" }
     reviewer = reviewer_with(worktrees, Minitest::Mock.new)
+    def reviewer.branch_update_wait = 0
     reviewer.run(@task)
     assert_equal [[167, "tested-head"]], updates
     assert_equal "waiting_for_review", @task.state

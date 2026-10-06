@@ -48,6 +48,29 @@ class PrWorkTest < Minitest::Test
     )
   end
 
+  def test_a_pr_asking_to_run_again_now_is_reviewed_before_other_prs
+    updated = Ghwatch::Task.for_pr(172)
+    updated.state = "waiting_for_review"
+    updated.retry_at = 0
+    other = Ghwatch::Task.for_pr(200)
+    other.state = "waiting_for_review"
+    other.retry_at = 0
+    events = []
+    reviewer = Action.new do |task|
+      if task.pr_number == 172 && !task.metadata["branch_updated_from"]
+        events << [:update_branch, 172]
+        task.metadata["branch_updated_from"] = "old"
+        task.retry_at = Time.now.to_i
+      else
+        events << [:review, task.pr_number]
+        task.transition_to("done")
+      end
+    end
+    machine = engine([other, updated], github: Github.new([pr(172), pr(200)]), worker: nil, reviewer: reviewer)
+    machine.run_due(scope: :pull_requests)
+    assert_equal [[:update_branch, 172], [:review, 172], [:review, 200]], events
+  end
+
   def test_conflicting_human_test_wait_returns_to_worker_and_finishes_before_newer_prs
     older = Ghwatch::Task.for_pr(164)
     older.state = "waiting_for_human_test"

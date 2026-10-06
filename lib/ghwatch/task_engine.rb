@@ -82,6 +82,7 @@ module Ghwatch
         end
 
         previous_state = task.state
+        previous_retry_at = task.retry_at
         case task.state
         when "implementing", "changes_requested", "continuing"
           @worker_action.run(task)
@@ -92,7 +93,9 @@ module Ghwatch
         when "finalizing"
           @finalizer_action.run(task)
         end
-        return if task.state == previous_state
+        # An action that keeps the state but asks to run again now (e.g. after
+        # updating the PR branch) continues here, before other work.
+        return if task.state == previous_state && (task.retry_at == previous_retry_at || !action_due?(task))
       end
 
       if limit > 1 && !task.done? && action_due?(task)
