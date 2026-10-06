@@ -156,6 +156,18 @@ class TriageScreeningTest < Minitest::Test
     assert_equal [1, 2, 3, 1, 2, 3], client.calls
   end
 
+  def test_ready_issues_start_oldest_first_whoever_the_model_selects
+    client = Client.new(5 => ["ready", 0.99], 3 => ["ready", 0.99], 4 => ["ready", 0.99])
+    @github.issues = {5 => issue(5)}
+    roles = Roles.new { |numbers| {"selected_issues" => numbers.reverse, "assessments" => numbers.map { |n| {"issue" => n, "status" => "ready", "reason" => "clear"} }} }
+    triage(roles, client).tap { |t| def t.available_worker_slots = 0 }.run
+
+    @github.issues[3] = issue(3)
+    @github.issues[4] = issue(4)
+    triage(roles, client).tap { |t| def t.available_worker_slots = 2 }.run
+    assert_equal [3, 4], @state.started
+  end
+
   def test_issues_ready_for_longer_start_before_newly_selected_ones
     client = Client.new(1 => ["ready", 0.99], 2 => ["ready", 0.99], 3 => ["ready", 0.99], 4 => ["ready", 0.99])
     @github.issues = {1 => issue(1), 2 => issue(2)}

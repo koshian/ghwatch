@@ -77,10 +77,11 @@ module Ghwatch
         selected = selected_issues(outcome)
       end
 
-      # Issues already judged ready but not started for lack of a slot have
-      # waited longest, so they go before newly selected ones.
+      # Issues already judged ready but not started for lack of a slot, and
+      # the ones just selected, start oldest first; the model only decides
+      # which are ready, not the order.
       ready = unchanged.map { |issue| issue["number"] }.select { |number| previous[number]&.fetch(:status) == "ready" }
-      start_issues((ready + selected).uniq.first(available_slots))
+      start_issues((ready + selected).uniq.sort.first(available_slots))
       mark_complete
     end
 

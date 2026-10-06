@@ -449,7 +449,8 @@ Triage runs in up to three stages and skips work it has already done:
 1. An issue unchanged since its last assessment is not judged again until
    `triage.reassess_after` (default `1d`) has passed. A `deferred` issue is also judged
    again after any PR merge, since that is usually what it waits for. An unchanged
-   `ready` issue starts as soon as a worker slot opens.
+   `ready` issue starts as soon as a worker slot opens. Issues that are ready start oldest
+   (lowest number) first; the model decides which are ready, not the order.
 2. With `[triage.screening]` enabled, a decision model (TypeSafe Jev, `POST /v1/systemone`)
    judges each changed issue. Only a confident (`min_confidence`, default 0.8) `deferred`,
    `followup` or `skip` is settled there; issues it would start or comment on, issues with
