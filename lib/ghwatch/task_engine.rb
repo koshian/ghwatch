@@ -169,6 +169,9 @@ module Ghwatch
 
     def finish_merged_task(task, pull_request)
       return false unless pull_request && pull_request["mergedAt"]
+      # Already past the merge: finalizing, or waiting on a human the finalizer
+      # asked. Restarting it would ask the same question again every cycle.
+      return false if task.state == "finalizing" || task.metadata["resume_state"] == "finalizing"
 
       @worktrees&.cleanup_review(task)
       task.state = (task.issue_number || task.worktree) ? "finalizing" : "done"

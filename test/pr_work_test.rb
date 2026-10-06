@@ -48,6 +48,25 @@ class PrWorkTest < Minitest::Test
     )
   end
 
+  def test_a_merged_pr_does_not_restart_finalizing_or_its_human_wait
+    task = Ghwatch::Task.for_issue(138, branch: "b", worktree: nil)
+    task.pr_number = 175
+    task.state = "waiting_for_human_test"
+    task.human_marker = "marker"
+    task.metadata["resume_state"] = "finalizing"
+    task.metadata["human_conversation_number"] = 138
+    merged = pr(175).merge("state" => "MERGED", "mergedAt" => "2026-10-06T01:22:19Z")
+    machine = engine([task], github: Github.new([merged]), worker: nil)
+    machine.reconcile_all
+    assert_equal "waiting_for_human_test", task.state
+
+    task.state = "finalizing"
+    task.metadata.delete("resume_state")
+    task.retry_at = Time.now.to_i + 600
+    machine.reconcile_all
+    refute task.retry_due?
+  end
+
   def test_a_pr_asking_to_run_again_now_is_reviewed_before_other_prs
     updated = Ghwatch::Task.for_pr(172)
     updated.state = "waiting_for_review"
