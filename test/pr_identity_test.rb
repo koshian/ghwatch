@@ -314,9 +314,15 @@ class PrIdentityTest < Minitest::Test
     triage = Object.new
     def triage.request! = nil
     reviewer = Ghwatch::Actions::Reviewer.new(**action_options.merge(issue_triage: triage))
-    outcome = OpenStruct.new(data: {"status" => "waiting_for_human_test", "body" => "Test this PR"}, signature: "reviewer")
+    missing = OpenStruct.new(data: {"status" => "waiting_for_human_test", "body" => "## Good\nReview"}, signature: "reviewer")
+    assert_raises(RuntimeError) { reviewer.send(:apply_result, @task, @github.pr, missing) }
+    assert_empty @github.comments
+
+    outcome = OpenStruct.new(data: {"status" => "waiting_for_human_test", "body" => "## Good\nReview",
+                                    "reporter_message" => "The cursor is now light on dark input fields. Please try this build."}, signature: "reviewer")
     reviewer.send(:apply_result, @task, @github.pr, outcome)
-    assert_equal [[:issue, 160, "@reporter\n\nTest this PR"]], @github.comments
+    assert_equal [[:pr, 164, "## Good\nReview"],
+      [:issue, 160, "@reporter\n\nThe cursor is now light on dark input fields. Please try this build."]], @github.comments
     assert_equal "waiting_for_human_test", @task.state
     restored = Ghwatch::Task.from_row(@task.to_row)
     assert @human_channel.reply_received?(restored)

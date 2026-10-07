@@ -124,6 +124,24 @@ module Ghwatch
       TEXT
     end
 
+    # Issues are where reporters follow their report; most are users, not
+    # reviewers of the code.
+    REPORTER_GUIDANCE = <<~TEXT
+      Text for the issue is read by the person who reported it, who may not be a developer.
+      Write it for them, not as a code review: no review headings (good points, risks,
+      blocking), no file paths, workspace paths or internal tool names, and code identifiers
+      only when the reporter needs them. Say, in plain terms:
+      - what the problem was, in the reporter's own terms;
+      - what changed in the application, as they will notice it;
+      - if they reported or tested before, what they reported and what was changed in
+        response to it, so they can see their report was acted on;
+      - for a test request: how to get the build (link, file name, how to start it), the steps
+        to try with what they should see, and exactly what to reply (what worked, what did
+        not, and logs or screenshots when something fails);
+      - for a completion note: what is now fixed and, if the issue stays open, why.
+      Keep it short and concrete; link the PR for details instead of repeating the review.
+    TEXT
+
     def reviewer_contract(role)
       deep_option = (role.to_s == "reviewer") ? "|deep_review" : ""
       <<~TEXT
@@ -138,6 +156,7 @@ module Ghwatch
         {
           "status": "merge|changes_requested|waiting_for_human_input|waiting_for_human_test|comment#{deep_option}|retry",
           "body": "human-facing review in the form the role instructions describe",
+          "reporter_message": "for waiting_for_human_test with a related issue: the request to the reporter",
           "issue": 123,
           "test_preparation": {
             "commit": "full tested commit SHA",
@@ -154,7 +173,13 @@ module Ghwatch
         satisfied; non-blocking suggestions belong in a merge review's body and are no reason
         to choose comment instead. changes_requested must explain actionable blocking problems.
         waiting_for_human_test must contain precise test instructions in body and identify
-        the related issue when known. comment is for a review that cannot decide yet and does
+        the related issue when known. With a related issue, body (the review) is posted on the
+        PR and reporter_message is posted on the issue as the request to the reporter; write
+        reporter_message as described below. Read the issue's earlier ghwatch test requests and
+        the reporter's replies first: when this is a new round after their feedback, open with
+        what they reported and what was changed because of it.
+
+        #{REPORTER_GUIDANCE} comment is for a review that cannot decide yet and does
         not authorize merge; the same head is not reviewed again until something changes.
         Do not wait for CI and do not return comment or retry only because checks are still
         running: judge the change. ghwatch merges only after the required checks pass and
@@ -212,6 +237,10 @@ module Ghwatch
           "reason": "short reason"
         }
         #{END_MARKER}
+
+        comment is posted on the issue.
+
+        #{REPORTER_GUIDANCE}
       TEXT
     end
   end

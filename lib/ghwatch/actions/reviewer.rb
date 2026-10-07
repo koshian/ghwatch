@@ -148,10 +148,12 @@ module Ghwatch
         when "changes_requested"
           post_review_body(task, data.fetch("body"), outcome, kind: "changes-requested")
           task.last_review_signature = refreshed_review_signature(task, fallback: initial_signature)
-        when "waiting_for_human_input", "waiting_for_human_test"
+        when "waiting_for_human_input"
           task.last_review_signature = initial_signature
-          kind = (data["status"] == "waiting_for_human_input") ? "human-question" : "human-test"
-          wait_for_human(task, data.fetch("body"), outcome, kind: kind, target: :pull_request)
+          wait_for_human(task, data.fetch("body"), outcome, kind: "human-question", target: :pull_request)
+        when "waiting_for_human_test"
+          task.last_review_signature = initial_signature
+          ask_for_human_test(task, data, outcome)
         when "comment"
           post_review_body(task, data.fetch("body"), outcome, kind: "review-comment")
           task.last_review_signature = refreshed_review_signature(task, fallback: initial_signature)
@@ -162,6 +164,21 @@ module Ghwatch
           raise "unknown review status #{data["status"].inspect}"
         end
         decide(task, role, data["status"])
+      end
+
+      # The review stays on the PR; the reporter gets a request written for
+      # them on the issue they follow.
+      def ask_for_human_test(task, data, outcome)
+        unless task.issue_number
+          wait_for_human(task, data.fetch("body"), outcome, kind: "human-test", target: :pull_request)
+          return
+        end
+
+        message = data["reporter_message"].to_s
+        raise "waiting_for_human_test for issue ##{task.issue_number} needs reporter_message" if message.strip.empty?
+
+        post_review_body(task, data["body"], outcome, kind: "review-comment")
+        wait_for_human(task, message, outcome, kind: "human-test", target: :issue)
       end
 
       def post_review_body(task, body, outcome, kind:)
