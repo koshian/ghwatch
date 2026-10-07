@@ -127,7 +127,7 @@ module Ghwatch
       roles = RoleRunner.new(config: config, command: command, prompt_store: prompts, log: log, verbose: options[:verbose])
       worktrees = WorktreeManager.new(project: project, config: config, github: github, command: command, log: log)
       context_builder = ContextBuilder.new(config: config)
-      human_channel = HumanChannel.new(github: github)
+      human_channel = HumanChannel.new(github: github, config: config)
       issue_triage = IssueTriage.new(
         project: project,
         config: config,

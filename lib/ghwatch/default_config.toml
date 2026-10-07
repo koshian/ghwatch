@@ -14,6 +14,8 @@ harmful_issues = "discussion"
 
 [github]
 status_labels = true
+# Logins to mention in questions asked on PRs; empty means the repository owner.
+human_mentions = []
 auto_merge = true
 merge_method = "merge"
 # Merge the base branch into PRs that are behind it before reviewing them.

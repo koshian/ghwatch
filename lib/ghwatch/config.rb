@@ -45,6 +45,12 @@ module Ghwatch
       data.fetch("github", {})
     end
 
+    # Logins mentioned in questions ghwatch asks on pull requests; empty means
+    # the repository owner when it is a person.
+    def human_mentions
+      Array(github.fetch("human_mentions", []))
+    end
+
     def status_labels?
       github.fetch("status_labels", true)
     end

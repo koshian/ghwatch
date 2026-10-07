@@ -139,14 +139,25 @@ label, for example `ghwatch:implementing`, `ghwatch:changes-requested`,
 Human waits use `ghwatch:waiting-for-human-input` and `ghwatch:waiting-for-human-test`.
 Other task states use the same names with underscores replaced by hyphens. `done` means
 the task completed; the Issue may remain open if more work is needed. Triage assessments
-without a task are not labelled. PR-only tasks are labelled once a source Issue is linked.
+without a task are not labelled.
+
+Open PRs that ghwatch works on carry a label from the same set: `implementing` (draft),
+`changes-requested` (the worker is reworking it), `waiting-for-review`, `ready-to-merge`,
+`waiting-for-human-input` and `waiting-for-human-test`. PRs without a source Issue are
+labelled too. When the PR merges or closes, or the task moves to another PR, its labels are
+removed. Questions ghwatch asks on a PR mention `github.human_mentions`, or the repository
+owner when that list is empty and the owner is a person, since nobody else is notified.
+
+A task waiting for a person, or for its merge, goes back to the worker when the PR's
+required checks fail (once per PR head), with the failed check names as the reason; the
+pending question is dropped, since it is asked again after the rework if still needed.
 
 Labels are synchronized on task saves and each cycle, including existing waiting tasks
 after restart. Only the known state labels are replaced; other labels remain intact.
 An active task takes precedence over completed tasks for the same Issue. API failures
 warn and retry on later synchronization without discarding saved task state.
 Set `github.status_labels = false` to disable synchronization; existing labels remain.
-The GitHub credential needs permission to create repository labels and edit Issue labels.
+The GitHub credential needs permission to create repository labels and edit Issue and PR labels.
 
 Runtime state is not stored under `.ghwatch/`. It lives inside the repository's Git directory:
 

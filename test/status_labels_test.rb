@@ -36,7 +36,7 @@ class StatusLabelsTest < Minitest::Test
       old.issue_number = 7
       old.state = "done"
       state.save_task(old)
-      assert_equal [7, "ghwatch:waiting-for-human-input"], github.calls.last
+      assert_equal [[7, "ghwatch:waiting-for-human-input"], [8, nil]], github.calls.last(2)
       task.state = "waiting_for_human_test"
       state.save_task(task)
       assert_equal [7, "ghwatch:waiting-for-human-test"], github.calls.last
@@ -60,14 +60,47 @@ class StatusLabelsTest < Minitest::Test
     end
   end
 
-  def test_disabled_sync_and_pr_without_related_issue_do_not_write
+  def test_disabled_sync_does_not_write
     state = Object.new
     github = Github.new
     labels = Ghwatch::StatusLabels.new(state: state, github: github, config: Ghwatch::Config.new({"github" => {"status_labels" => false}}))
     labels.sync(Ghwatch::Task.for_issue(7, branch: "issue-7", worktree: nil))
-    labels = Ghwatch::StatusLabels.new(state: state, github: github, config: Ghwatch::Config.new({}))
-    labels.sync(Ghwatch::Task.for_pr(8))
+    labels.sync_all
     assert_empty github.calls
+  end
+
+  def test_pull_requests_carry_their_task_state_until_merged
+    Dir.mktmpdir do |directory|
+      state = Ghwatch::StateStore.new(File.join(directory, "state.sqlite3"))
+      github = Github.new
+      state.status_labels = Ghwatch::StatusLabels.new(state: state, github: github, config: Ghwatch::Config.new({}))
+
+      external = Ghwatch::Task.for_pr(8)
+      state.save_task(external)
+      assert_equal [[8, "ghwatch:waiting-for-review"]], github.calls
+
+      task = Ghwatch::Task.for_issue(7, branch: "issue-7", worktree: nil)
+      state.save_task(task)
+      task.pr_number = 9
+      task.state = "waiting_for_human_input"
+      state.save_task(task)
+      assert_equal [[7, "ghwatch:waiting-for-human-input"], [9, "ghwatch:waiting-for-human-input"]], github.calls.last(2)
+
+      task.state = "continuing"
+      state.save_task(task)
+      assert_equal [9, "ghwatch:changes-requested"], github.calls.last
+
+      # The PR was closed and the task went back to the worker: the old PR is cleared.
+      task.pr_number = nil
+      task.state = "implementing"
+      state.save_task(task)
+      assert_equal [[7, "ghwatch:implementing"], [9, nil]], github.calls.last(2)
+
+      task.pr_number = 10
+      task.state = "finalizing"
+      state.save_task(task)
+      assert_equal [10, nil], github.calls.last
+    end
   end
 
   class Api < Ghwatch::Github

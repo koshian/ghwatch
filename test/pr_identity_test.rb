@@ -51,6 +51,8 @@ class PrIdentityTest < Minitest::Test
       "marker"
     end
 
+    def owner_login = "koshian"
+
     def human_comments_after(number, marker:)
       @lookups << number
       ["reply"]
@@ -167,7 +169,7 @@ class PrIdentityTest < Minitest::Test
     assert_equal 164, @task.metadata["human_conversation_number"]
     assert_equal "waiting_for_review", @task.metadata["resume_state"]
     assert_nil @task.retry_at
-    assert_equal [[:pr, 164, body]], @github.comments
+    assert_equal [[:pr, 164, "@koshian\n\n#{body}"]], @github.comments
     @engine.run_due
     assert_empty @reviewer.calls
     @engine.reconcile_all
@@ -323,7 +325,7 @@ class PrIdentityTest < Minitest::Test
     outcome = OpenStruct.new(signature: "reviewer")
     @human_channel.wait(task: task, body: "Test this PR", outcome: outcome,
       kind: "human-test", resume_state: "waiting_for_review", target: :pull_request)
-    assert_equal [[:pr, 164, "Test this PR"]], @github.comments
+    assert_equal [[:pr, 164, "@koshian\n\nTest this PR"]], @github.comments
     @human_channel.wait(task: @task, body: "@reporter please test", outcome: outcome,
       kind: "human-test", resume_state: "waiting_for_review")
     assert_equal [:issue, 160, "@reporter please test"], @github.comments.last

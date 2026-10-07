@@ -48,6 +48,42 @@ class PrWorkTest < Minitest::Test
     )
   end
 
+  def test_failed_checks_end_a_human_wait_or_a_merge_wait_once_per_head
+    waiting = Ghwatch::Task.for_issue(227, branch: "b", worktree: nil)
+    waiting.pr_number = 231
+    waiting.state = "waiting_for_human_input"
+    waiting.human_marker = "marker"
+    waiting.metadata["resume_state"] = "waiting_for_review"
+    waiting.metadata["human_conversation_number"] = 231
+    merging = Ghwatch::Task.for_issue(228, branch: "c", worktree: nil)
+    merging.pr_number = 232
+    merging.state = "ready_to_merge"
+    external = Ghwatch::Task.for_pr(233)
+    external.state = "ready_to_merge"
+    failing = [{"name" => "Linux", "status" => "COMPLETED", "conclusion" => "SUCCESS"},
+      {"name" => "macOS ARM64", "status" => "COMPLETED", "conclusion" => "FAILURE"}]
+    github = Github.new([pr(231), pr(232), pr(233)])
+    github.prs.each_value { |item| item["statusCheckRollup"] = failing }
+    machine = Ghwatch::TaskEngine.new(
+      state: State.new([waiting, merging, external]), github: github, worker_action: nil,
+      reviewer_action: nil, finalizer_action: nil,
+      human_channel: OpenStruct.new(reply_received?: false),
+      config: OpenStruct.new(retry_after: 60, reviewer_requires_green_checks?: true), log: Ghwatch::Log.new(StringIO.new)
+    )
+    machine.reconcile_all
+    assert_equal "changes_requested", waiting.state
+    assert_nil waiting.human_marker
+    assert_includes waiting.metadata["rework_reason"], "macOS ARM64"
+    assert_equal "changes_requested", merging.state
+    refute_equal "changes_requested", external.state, "an external PR has no worker to return to"
+
+    # The worker could not push a fix and a person is asked again: not repeated for the same head.
+    waiting.state = "waiting_for_human_input"
+    waiting.metadata["resume_state"] = "waiting_for_review"
+    machine.reconcile_all
+    assert_equal "waiting_for_human_input", waiting.state
+  end
+
   def test_a_merged_pr_does_not_restart_finalizing_or_its_human_wait
     task = Ghwatch::Task.for_issue(138, branch: "b", worktree: nil)
     task.pr_number = 175

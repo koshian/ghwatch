@@ -117,6 +117,7 @@ module Ghwatch
       return if finish_merged_task(task, pull_request)
       return if recover_from_closed_pull_request(task, pull_request)
       return if return_conflicting_pr_to_worker(task, pull_request)
+      return if return_failed_checks_to_worker(task, pull_request)
 
       resume_after_human_reply(task) if task.waiting_for_human? && @human_channel.reply_received?(task)
       release_for_human_wait(task) if task.waiting_for_human?
@@ -151,6 +152,32 @@ module Ghwatch
       task.metadata.delete("human_conversation_number")
       task.metadata.delete("resume_state")
       task.metadata["rework_reason"] = "Resolve conflicts with the PR base branch, test, and push updates to the existing PR."
+      task.last_review_signature = nil
+      task.transition_to("changes_requested", retry_at: Time.now.to_i)
+      @state.save_task(task)
+      true
+    end
+
+    # A PR whose checks fail cannot merge, but a task waiting for a person or
+    # for its merge does not look at checks again. Send it back to the worker
+    # instead of leaving it waiting for something that cannot unblock it.
+    def return_failed_checks_to_worker(task, pull_request)
+      return false unless task.issue_number && pull_request && pull_request["state"] == "OPEN"
+      return false unless @config.reviewer_requires_green_checks?
+      return false unless task.waiting_for_human? || task.state == "ready_to_merge"
+      return false if task.metadata["resume_state"] == "finalizing"
+
+      failed = @github.failed_checks(pull_request)
+      head = pull_request["headRefOid"]
+      return false if failed.empty? || task.metadata["failed_checks_head"] == head
+
+      @log.info("[#{task.id}] PR ##{task.pr_number} checks failed (#{failed.join(", ")}); returning to worker")
+      task.human_marker = nil
+      task.metadata.delete("human_conversation_number")
+      task.metadata.delete("resume_state")
+      task.metadata["failed_checks_head"] = head
+      task.metadata["rework_reason"] = "Required CI checks failed on #{head}: #{failed.join(", ")}. " \
+        "Read their logs, fix the cause, test, and push updates to the existing PR."
       task.last_review_signature = nil
       task.transition_to("changes_requested", retry_at: Time.now.to_i)
       @state.save_task(task)

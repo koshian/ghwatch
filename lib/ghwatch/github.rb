@@ -26,6 +26,15 @@ module Ghwatch
       @repo_name ||= gh_json("repo", "view", "--json", "nameWithOwner").fetch("nameWithOwner")
     end
 
+    # The repository owner when it is a person (organizations cannot be
+    # mentioned usefully), so questions on PRs reach someone.
+    def owner_login
+      return @owner_login if defined?(@owner_login)
+
+      owner = gh_api("repos/#{repo_name}").fetch("owner", {})
+      @owner_login = (owner["type"] == "User") ? owner["login"] : nil
+    end
+
     def default_branch
       @default_branch ||= gh_json("repo", "view", "--json", "defaultBranchRef").dig("defaultBranchRef", "name")
     end
@@ -137,7 +146,7 @@ module Ghwatch
     def sync_issue_state_label(number, label:, managed_labels:, color:, description:)
       current = gh_api_paginated("repos/#{repo_name}/issues/#{number}/labels?per_page=100").map { |item| item.fetch("name") }
       stale = (current & managed_labels) - [label]
-      unless current.include?(label)
+      unless label.nil? || current.include?(label)
         available = gh_api_paginated("repos/#{repo_name}/labels?per_page=100").map { |item| item.fetch("name") }
         gh("label", "create", label, "--repo", repo_name, "--color", color, "--description", description) unless available.include?(label)
         gh("api", "--method", "POST", "repos/#{repo_name}/issues/#{number}/labels", "-f", "labels[]=#{label}")
@@ -224,6 +233,16 @@ module Ghwatch
         "comments" => normalized_comments(pr["comments"]),
         "inlineComments" => Array(pr["inlineComments"]).map { |comment| comment.slice("id", "updated_at", "body") }
       )
+    end
+
+    FAILED_CONCLUSIONS = %w[FAILURE TIMED_OUT CANCELLED ACTION_REQUIRED STARTUP_FAILURE ERROR].freeze
+
+    # Names of the PR's checks that finished unsuccessfully.
+    def failed_checks(pr)
+      Array(pr["statusCheckRollup"]).filter_map do |check|
+        conclusion = (check["conclusion"] || check["state"]).to_s.upcase
+        check["name"] || check["context"] if FAILED_CONCLUSIONS.include?(conclusion)
+      end
     end
 
     def checks_pending?(pr)
