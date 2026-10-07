@@ -90,34 +90,29 @@ module Ghwatch
 
         #{START_MARKER}
         {
-          "status": "waiting_for_review|waiting_for_human_input|waiting_for_human_test|continue|done|deferred",
+          "status": "waiting_for_review|waiting_for_human_input|continue|done|deferred",
           "pr": 123,
-          "question": "human-facing question or test request, when required",
+          "question": "human-facing question, for waiting_for_human_input",
           "test_preparation": {
             "commit": "full tested commit SHA",
-            "verified": ["checks performed and their results"],
-            "remaining": ["checks that require a person and why"],
-            "test_subject": "build/run link, artifact name, access and startup instructions, or why no artifact is needed",
-            "steps": ["human test steps and expected results"]
+            "verified": ["checks you performed and their results"],
+            "remaining": ["checks you think only a person can do, and why"]
           },
           "reason": "short reason when useful"
         }
         #{END_MARKER}
 
-        For waiting_for_review, include the PR number. For waiting_for_human_input or
-        waiting_for_human_test, include a complete human-facing question/request. Use
-        continue when useful work was made but another autonomous pass is needed. Do not
-        claim waiting_for_review until the branch has been pushed and the PR exists.
+        Once the change is implemented, verified with the project's own tools and pushed,
+        return waiting_for_review with the PR number; do not claim it before the branch is
+        pushed and the PR exists. Use continue only when the implementation itself is not
+        finished and another pass of yours is needed, never to prepare testing. Use
+        waiting_for_human_input, with a complete question, for information, decisions or
+        access you cannot obtain yourself.
 
-        Before proposing human testing, read the project's development and verification
-        instructions. Complete checks available to you and prepare the test subject using
-        the project's tools. Record the evidence in the PR and include test_preparation
-        when human testing remains. Do not infer that a check needs a person merely because
-        it involves a GUI. Use continue while autonomous preparation remains; use
-        waiting_for_human_input for missing information or access you cannot obtain.
-        waiting_for_human_test is a proposal for reviewer validation: include the existing
-        PR number and a complete question. ghwatch sends it to review before notifying
-        anyone. Never merge the PR to make a pre-merge test possible.
+        Human testing is the reviewer's decision: do not start or wait for test builds and do
+        not write test requests. Record what you verified in test_preparation and, under
+        remaining, what you think only a person can check; the reviewer decides. Do not infer
+        that a check needs a person merely because it involves a GUI. Never merge the PR.
         While a person is being waited on, ghwatch removes ignored build outputs from the
         task worktree, so human instructions must obtain or build the test subject
         themselves rather than point at files there.

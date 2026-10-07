@@ -187,7 +187,7 @@ the first one with a rule for the task's group is applied.
 
 | Result | Next state and effects | Notes |
 | --- | --- | --- |
-| `waiting_for_review` | `waiting_for_review`; forget the last review; run now; triage again | Also for `waiting_for_human_test`: the test request goes to the reviewer |
+| `waiting_for_review` | `waiting_for_review`; forget the last review; run now; triage again | Human testing is the reviewer's decision; an older `waiting_for_human_test` result is treated alike |
 | `waiting_for_human_input` | `waiting_for_human_input`; resumes the current state; start waiting |  |
 | `continue` | `continuing`; retry after `retry_after` |  |
 | `done` | `waiting_for_review`; run now | The PR is open |

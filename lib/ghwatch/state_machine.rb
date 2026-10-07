@@ -101,7 +101,7 @@ module Ghwatch
     }.freeze
 
     RESULT_NOTES = {
-      ["worker", "waiting_for_review"] => "Also for `waiting_for_human_test`: the test request goes to the reviewer",
+      ["worker", "waiting_for_review"] => "Human testing is the reviewer's decision; an older `waiting_for_human_test` result is treated alike",
       ["worker", "done"] => "The PR is open",
       ["worker", "merged"] => "`done` reported and the PR is already merged",
       ["worker", "deferred"] => "The issue's assessment becomes `deferred`",

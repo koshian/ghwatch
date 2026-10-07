@@ -85,10 +85,10 @@ module Ghwatch
         Record the tested commit, commands, observations and evidence paths in the review body.
         Use changes_requested for defects or missing test infrastructure that needs code changes.
         Request human testing only for specific checks you cannot perform in this environment;
-        explain what you tried and the remaining limitation. ghwatch posts human test requests
-        on the source Issue and mentions its reporter when available. Include the PR link,
-        test build URL, tested SHA, artifact names, access and startup instructions, exact
-        steps and expected results in the request. Ask the reporter to reply on the Issue.
+        explain what you tried and the remaining limitation. ghwatch posts the review on the PR
+        and the request (reporter_message) on the source Issue, mentioning its reporter when
+        available. The request needs the test build link, artifact name, startup instructions,
+        exact steps and expected results, written for the reporter.
         If there is no source Issue, the request and reply belong on the PR instead.
         Missing system packages are environment blockers: return waiting_for_human_input
         with the exact apt package names, their purpose, observed errors, a copyable install
@@ -117,11 +117,14 @@ module Ghwatch
         Related issue: #{task.issue_number || "none"}
         Pull request: #{task.pr_number}
 
-        Worker test preparation (verify against the current PR commit and project policy):
-        #{JSON.pretty_generate(task.metadata["test_preparation"])}
+        Whether a person must test this change is your decision. The worker does not prepare
+        test builds or test requests: when a person must test, start the test build, wait for
+        it and write the request yourself.
 
-        Proposed human test request (not yet sent to a person):
-        #{JSON.pretty_generate(task.metadata["human_test_request"])}
+        What the worker verified and what it thinks only a person can check (confirm against
+        the current PR commit and project policy):
+        #{JSON.pretty_generate(task.metadata["test_preparation"])}
+        #{proposed_human_test(task)}
 
         Issue snapshot:
         #{JSON.pretty_generate(compact_issue(issue))}
@@ -152,6 +155,14 @@ module Ghwatch
 
     # GitHub payloads carry many URLs, ids, reactions and diff hunks that agents
     # don't need; keep only what describes the discussion so prompts stay small.
+    # Results from before the reviewer owned human testing may still carry one.
+    def proposed_human_test(task)
+      request = task.metadata["human_test_request"]
+      return "" unless request
+
+      "An earlier worker proposed this human test (not sent to anyone): #{JSON.generate(request)}"
+    end
+
     # The reply to the last question ghwatch asked, wherever it was posted.
     def human_answer(task)
       answer = task.metadata["human_answer"]
