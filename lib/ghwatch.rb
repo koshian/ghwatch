@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative "ghwatch/version"
+require_relative "ghwatch/self_update"
 require_relative "ghwatch/duration"
 require_relative "ghwatch/log"
 require_relative "ghwatch/agent_progress"
@@ -39,3 +40,12 @@ require_relative "ghwatch/scheduler"
 require_relative "ghwatch/doctor"
 require_relative "ghwatch/status"
 require_relative "ghwatch/cli"
+
+module Ghwatch
+  # The command line ghwatch was started with, for restarting itself.
+  def self.argv = @argv ||= []
+
+  def self.argv=(argv)
+    @argv = argv
+  end
+end

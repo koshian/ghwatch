@@ -172,7 +172,9 @@ module Ghwatch
         config: config,
         github: github,
         status_labels: status_labels,
-        log: log
+        log: log,
+        self_update: SelfUpdate.new,
+        argv: Ghwatch.argv
       )
 
       {scheduler: scheduler}

@@ -2,7 +2,11 @@
 
 module Ghwatch
   class Scheduler
-    def initialize(task_engine:, review_intake:, issue_triage:, config:, github:, status_labels: nil, log: Log.new)
+    # How often a long wait checks whether a new ghwatch was installed.
+    UPDATE_CHECK_INTERVAL = 60
+
+    def initialize(task_engine:, review_intake:, issue_triage:, config:, github:, status_labels: nil, log: Log.new,
+      self_update: nil, argv: [])
       @task_engine = task_engine
       @review_intake = review_intake
       @issue_triage = issue_triage
@@ -10,6 +14,8 @@ module Ghwatch
       @github = github
       @status_labels = status_labels
       @log = log
+      @self_update = self_update
+      @argv = argv
       @running = true
       @wakeup_reader, @wakeup_writer = IO.pipe
     end
@@ -23,7 +29,11 @@ module Ghwatch
 
       while @running
         cycle
+        # Between cycles no agent runs, so this is where a new install takes over.
+        return restart if updated?
+
         wait(@config.poll_interval) if @running
+        return restart if updated?
       end
 
       @log.info("ghwatch stopped")
@@ -66,7 +76,27 @@ module Ghwatch
         seconds = [seconds, retry_delay].min
       end
       @log.info("waiting until #{(Time.now + seconds).iso8601} for the next check (#{seconds}s)")
-      IO.select([@wakeup_reader], nil, nil, seconds)
+      deadline = Time.now + seconds
+      checking = @self_update&.enabled?
+      while @running && (remaining = deadline - Time.now) > 0
+        break if IO.select([@wakeup_reader], nil, nil, checking ? [remaining, UPDATE_CHECK_INTERVAL].min : remaining)
+        break if checking && updated?
+      end
+    end
+
+    def updated?
+      return false unless @running && @self_update
+      return @updated if @updated
+
+      @updated = @self_update.updated?
+    rescue => e
+      @log.warn("could not check for a newly installed ghwatch: #{e.message}")
+      false
+    end
+
+    def restart
+      @log.info("a new ghwatch was installed; restarting into it")
+      @self_update.restart(@argv)
     end
 
     # The first INT/TERM stops ghwatch after the current step. The handler then

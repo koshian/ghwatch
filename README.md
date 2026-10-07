@@ -131,6 +131,14 @@ Inspect durable state:
 ghwatch status
 ```
 
+## Updating
+
+When ghwatch runs from an installed gem, installing a new version (for example
+`rake install:user`) is enough: ghwatch notices the new files, waits until they stop
+changing, and restarts into the new version with the same arguments at the next point
+where no agent runs (between cycles, or within a minute while it waits). A run from a
+source checkout does not restart itself.
+
 ## Durable state
 
 The task state machine (states, transitions and reactions to outside events) is specified

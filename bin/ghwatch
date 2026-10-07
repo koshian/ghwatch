@@ -3,4 +3,5 @@
 
 require "ghwatch"
 
+Ghwatch.argv = ARGV.dup
 Ghwatch::CLI.start(ARGV)
