@@ -133,6 +133,9 @@ ghwatch status
 
 ## Durable state
 
+The task state machine (states, transitions and reactions to outside events) is specified
+in [ARCHITECTURE.md](ARCHITECTURE.md).
+
 By default ghwatch reflects each task's state on its source Issue using a single managed
 label, for example `ghwatch:implementing`, `ghwatch:changes-requested`,
 `ghwatch:waiting-for-review`, `ghwatch:ready-to-merge`, `ghwatch:finalizing`, or `ghwatch:done`.
