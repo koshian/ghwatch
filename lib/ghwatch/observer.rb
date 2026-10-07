@@ -23,7 +23,9 @@ module Ghwatch
       elsif needs_pull_request?(task)
         events["pr_missing"] = {}
       end
-      events["reply"] = {} if task.waiting_for_human? && reply?(task, snapshot)
+      if task.waiting_for_human? && (answer = reply(task, snapshot))
+        events["reply"] = answer
+      end
       events["activity"] = {} if activity?(task, snapshot, observed)
       events
     end
@@ -90,15 +92,33 @@ module Ghwatch
     end
 
     # A reply is any comment by a person after the question, on the PR or the
-    # issue: no agent of this task runs while it waits.
-    def reply?(task, snapshot)
-      return false unless task.human_marker
+    # issue: no agent of this task runs while it waits. Returns the question
+    # and the replies, which the next agent run is given as the answer.
+    def reply(task, snapshot)
+      return nil unless task.human_marker
 
-      comments = all_comments(snapshot)
+      comments = labelled_comments(task, snapshot)
       question = comments.find { |comment| comment.fetch("body", "").include?(task.human_marker.to_s) }
-      return false unless question
+      return nil unless question
 
-      comments.any? { |comment| comment.fetch("id").to_i > question.fetch("id").to_i && human?(comment) }
+      replies = comments.select { |comment| comment.fetch("id").to_i > question.fetch("id").to_i && human?(comment) }
+      return nil if replies.empty?
+
+      {
+        question: {"where" => question["where"], "body" => question["body"]},
+        replies: replies.sort_by { |comment| comment.fetch("id").to_i }.map do |comment|
+          {"where" => comment["where"], "author" => comment.dig("user", "login") || comment.dig("author", "login"),
+           "createdAt" => comment["created_at"] || comment["createdAt"], "body" => comment["body"]}.compact
+        end
+      }
+    end
+
+    def labelled_comments(task, snapshot)
+      issue = Array(snapshot.issue&.fetch("comments", nil)).map { |comment| comment.merge("where" => "issue ##{task.issue_number}") }
+      pull_request = Array(snapshot.pull_request&.fetch("comments", nil)).map do |comment|
+        comment.merge("where" => "PR ##{snapshot.pull_request["number"]}")
+      end
+      issue + pull_request
     end
 
     def activity?(task, snapshot, observed)

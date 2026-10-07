@@ -246,7 +246,7 @@ the first one with a rule for the task's group is applied.
 | Conflict with the base | unchanged; run now; only when newly observed | `changes_requested`; rework: conflict; forget the last review; run now | `changes_requested`; rework: conflict; forget the last review; run now | `changes_requested`; clear the wait; rework: conflict; forget the last review; run now | — | — |
 | Required checks failed | unchanged; run now; only when newly observed | — | `changes_requested`; rework: failed checks; forget the last review; run now; once per PR head | `changes_requested`; clear the wait; rework: failed checks; forget the last review; run now; once per PR head | — | — |
 | Someone pushed to the PR | unchanged; run now | unchanged; run now | `waiting_for_review`; run now | `waiting_for_review`; clear the wait; run now | — | — |
-| A person replied after the question (PR or issue) | — | — | — | the interrupted state; clear the wait; run now | the interrupted state; clear the wait; run now | — |
+| A person replied after the question (PR or issue) | — | — | — | the interrupted state; clear the wait; give the answer to the next runs; run now | the interrupted state; clear the wait; give the answer to the next runs; run now | — |
 | New comment or review by a person | unchanged; run now | unchanged; run now | `waiting_for_review`; run now | — | — | — |
 <!-- END GENERATED -->
 

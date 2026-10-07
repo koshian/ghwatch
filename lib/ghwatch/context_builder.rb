@@ -33,7 +33,7 @@ module Ghwatch
     def worker(task:, issue:, pull_request:)
       <<~TEXT
         You are the implementation worker for one durable ghwatch task.
-
+        #{human_answer(task)}
         Task state: #{task.state}
         Assigned issue: #{task.issue_number || "none"}
         Current pull request: #{task.pr_number || "none"}
@@ -74,7 +74,7 @@ module Ghwatch
         Review the pull request as an independent reviewer. Read AGENTS.md and relevant project
         specifications. Inspect the current PR diff, CI/check state, review discussion, and the
         related issue when present. Compare the change with current main where useful.
-
+        #{human_answer(task)}
         ghwatch prepared a detached review workspace at PR commit #{pull_request["headRefOid"]}.
         Build and run the project's tests and verification tools in this workspace. Generated
         build outputs, logs and screenshots are allowed; do not edit source, commit, push,
@@ -136,7 +136,7 @@ module Ghwatch
         The implementation phase is over or the pull request has merged. Verify whether the
         related issue is actually resolved and whether any promised human verification is still
         outstanding. Do not edit source code.
-
+        #{human_answer(task)}
         Related issue: #{task.issue_number || "none"}
         Pull request: #{task.pr_number || "none"}
 
@@ -152,6 +152,30 @@ module Ghwatch
 
     # GitHub payloads carry many URLs, ids, reactions and diff hunks that agents
     # don't need; keep only what describes the discussion so prompts stay small.
+    # The reply to the last question ghwatch asked, wherever it was posted.
+    def human_answer(task)
+      answer = task.metadata["human_answer"]
+      return "" unless answer
+
+      <<~TEXT
+
+        A person answered ghwatch's last request. Read this first; it is the answer, even if it
+        was posted somewhere other than where the request was:
+
+        #{JSON.pretty_generate(answer)}
+
+        Address every point of it and say how. Images in it are part of the answer: download
+        them with authentication, for example
+        `curl -sL -H "Authorization: token $(gh auth token)" -o shot.png URL`, and look at them.
+        Judge it against the problem the issue describes, not against the scope the PR chose:
+        if it shows that problem still happens somewhere (another screen, field or case), the
+        issue is not fixed yet, which a reviewer reports as changes_requested. A different
+        problem outside the issue does not block this work: tell the person it will be handled
+        separately and note it for the maintainers. Repeat a request only if the answer does
+        not cover it, and then say exactly what is still missing.
+      TEXT
+    end
+
     def compact_issue(issue)
       return issue unless issue.is_a?(Hash)
 

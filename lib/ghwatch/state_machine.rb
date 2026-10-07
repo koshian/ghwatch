@@ -45,6 +45,7 @@ module Ghwatch
       retry_later: "retry after `retry_after`",
       no_retry: "wait for an event",
       start_wait: "start waiting",
+      remember_answer: "give the answer to the next runs",
       clear_wait: "clear the wait",
       reset_review: "forget the last review",
       forget_pr: "forget the PR (tasks with an issue)",
@@ -171,8 +172,8 @@ module Ghwatch
         wait_work: rule("waiting_for_review", :clear_wait, :run_now)
       }],
       ["reply", "A person replied after the question (PR or issue)", {
-        wait_work: rule(:resume, :clear_wait, :run_now),
-        wait_final: rule(:resume, :clear_wait, :run_now)
+        wait_work: rule(:resume, :clear_wait, :remember_answer, :run_now),
+        wait_final: rule(:resume, :clear_wait, :remember_answer, :run_now)
       }],
       ["activity", "New comment or review by a person", {
         worker: rule(nil, :run_now),
@@ -330,7 +331,10 @@ module Ghwatch
       when :no_retry then task.retry_at = nil
       when :start_wait
         task.metadata["resume_state"] = context.fetch(:resume)
+        task.metadata.delete("human_answer")
         task.retry_at = nil
+      when :remember_answer
+        task.metadata["human_answer"] = {"question" => context[:question], "replies" => context[:replies]}
       when :clear_wait
         task.human_marker = nil
         task.metadata.delete("human_conversation_number")
