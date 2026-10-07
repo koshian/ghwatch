@@ -52,10 +52,16 @@ class SchedulingTest < Minitest::Test
       events << :issue
       task.equal?(issue)
     }
+    github = Object.new
+    def github.issue(number) = {"number" => number, "state" => "OPEN", "comments" => []}
+    def github.issue_signature(issue) = "issue"
+    def github.pull_request(number) = {"number" => number, "state" => "OPEN", "headRefOid" => "head", "comments" => []}
+    def github.pr_signature(pr) = "pr"
+    def github.review_signature(pr) = "review"
     engine = Ghwatch::TaskEngine.new(
-      state: OpenStruct.new(tasks: [issue, waiting, rework, later]), github: nil,
+      state: Struct.new(:tasks) { def save_task(task) = task }.new([issue, waiting, rework, later]), github: github,
       human_channel: nil, worker_action: worker, reviewer_action: nil,
-      finalizer_action: nil, config: nil
+      finalizer_action: nil, config: OpenStruct.new(retry_after: 60), log: Ghwatch::Log.new(StringIO.new)
     )
     engine.run_due
     assert_equal %i[rework issue], events

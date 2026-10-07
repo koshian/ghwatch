@@ -11,7 +11,6 @@ module Ghwatch
       "continuing" => "changes_requested",
       "changes_requested" => "changes_requested",
       "waiting_for_review" => "waiting_for_review",
-      "waiting_for_re_review" => "waiting_for_review",
       "ready_to_merge" => "ready_to_merge",
       "waiting_for_human_input" => "waiting_for_human_input",
       "waiting_for_human_test" => "waiting_for_human_test"

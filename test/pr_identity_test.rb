@@ -109,7 +109,7 @@ class PrIdentityTest < Minitest::Test
   end
 
   def test_missing_pr_prevents_review_and_finalization_and_a_later_pr_resumes_review
-    %w[waiting_for_review waiting_for_re_review ready_to_merge finalizing].each do |state|
+    %w[waiting_for_review ready_to_merge finalizing].each do |state|
       @task.transition_to(state, retry_at: 0)
       @engine.run_due
       assert_equal "continuing", @task.state
@@ -172,6 +172,9 @@ class PrIdentityTest < Minitest::Test
     assert_equal [[:pr, 164, "@koshian\n\n#{body}"]], @github.comments
     @engine.run_due
     assert_empty @reviewer.calls
+    @engine.reconcile_all
+    assert_equal "waiting_for_human_input", @task.state, "no reply yet"
+    @github.pr["comments"] = [{"id" => 1, "body" => "question <!-- marker -->"}, {"id" => 2, "body" => "Installed."}]
     @engine.reconcile_all
     assert_equal "waiting_for_review", @task.state
     @engine.run_due
@@ -324,10 +327,10 @@ class PrIdentityTest < Minitest::Test
     task = Ghwatch::Task.for_pr(164)
     outcome = OpenStruct.new(signature: "reviewer")
     @human_channel.wait(task: task, body: "Test this PR", outcome: outcome,
-      kind: "human-test", resume_state: "waiting_for_review", target: :pull_request)
+      kind: "human-test", target: :pull_request)
     assert_equal [[:pr, 164, "@koshian\n\nTest this PR"]], @github.comments
     @human_channel.wait(task: @task, body: "@reporter please test", outcome: outcome,
-      kind: "human-test", resume_state: "waiting_for_review")
+      kind: "human-test")
     assert_equal [:issue, 160, "@reporter please test"], @github.comments.last
   end
 
@@ -335,7 +338,7 @@ class PrIdentityTest < Minitest::Test
     def @github.issue(number) = {"number" => number, "state" => "OPEN", "author" => nil}
     outcome = OpenStruct.new(signature: "reviewer")
     @human_channel.wait(task: @task, body: "Test build: https://example.com/build", outcome: outcome,
-      kind: "human-test", resume_state: "waiting_for_review", target: :pull_request)
+      kind: "human-test", target: :pull_request)
     assert_equal [[:issue, 160, "Test build: https://example.com/build"]], @github.comments
     assert_equal 160, @task.metadata["human_conversation_number"]
   end
@@ -352,6 +355,7 @@ class PrIdentityTest < Minitest::Test
     triage = Object.new
     def triage.request! = nil
     reviewer = Ghwatch::Actions::Reviewer.new(**action_options.merge(issue_triage: triage))
+    @task.state = "waiting_for_review"
     reviewer.send(:apply_result, @task, @github.pr, OpenStruct.new(
       data: {"status" => "comment", "body" => "Wait for CI completion"}, signature: "reviewer"
     ))
@@ -385,16 +389,11 @@ class PrIdentityTest < Minitest::Test
       issue: nil, pull_request: after, issue_signature: nil,
       pull_request_signature: github.pr_signature(after), review_signature: github.review_signature(after)
     )
+    observer = Ghwatch::Observer.new(github: github, config: OpenStruct.new(reviewer_requires_green_checks?: true))
     @task.state = "waiting_for_review"
-    @task.schedule_retry(after: 3600)
-    @engine.send(:schedule_review_when_needed, @task, snapshot)
-    assert @task.retry_due?
+    assert observer.events(@task, snapshot).key?("activity")
 
     @task.state = "ready_to_merge"
-    @task.schedule_retry(after: 3600)
-    retry_at = @task.retry_at
-    @engine.send(:schedule_review_when_needed, @task, snapshot)
-    assert_equal "ready_to_merge", @task.state
-    assert_equal retry_at, @task.retry_at
+    refute observer.events(@task, snapshot).key?("activity")
   end
 end

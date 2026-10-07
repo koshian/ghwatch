@@ -20,4 +20,11 @@ namespace :install do
   end
 end
 
+desc "Regenerate the state machine tables in ARCHITECTURE.md"
+task :docs do
+  require_relative "lib/ghwatch"
+  path = File.expand_path("ARCHITECTURE.md", __dir__)
+  File.write(path, Ghwatch::StateMachine.render_into(File.read(path)))
+end
+
 task default: :test

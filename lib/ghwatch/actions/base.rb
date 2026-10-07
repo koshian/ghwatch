@@ -3,7 +3,7 @@
 module Ghwatch
   module Actions
     class Base
-      def initialize(project:, config:, state:, github:, roles:, context_builder:, human_channel:, issue_triage:, log: Log.new)
+      def initialize(project:, config:, state:, github:, roles:, context_builder:, human_channel:, issue_triage:, log: Log.new, machine: nil)
         @project = project
         @config = config
         @state = state
@@ -13,13 +13,24 @@ module Ghwatch
         @human_channel = human_channel
         @issue_triage = issue_triage
         @log = log
+        @machine = machine
       end
 
       private
 
-      def retry_failed_role(task, outcome)
+      # Actions decide; the state machine changes the state.
+      def machine
+        @machine ||= StateMachine.new(github: @github, config: @config, worktrees: @worktrees,
+          issue_triage: @issue_triage, log: @log)
+      end
+
+      def decide(task, role, result, context = {})
+        machine.apply_result(task, role, result, context)
+      end
+
+      def retry_failed_role(task, outcome, role)
         task.last_error = "#{outcome.error_kind}: #{outcome.error}"
-        task.schedule_retry(after: @config.retry_after)
+        decide(task, role, "failed")
         @state.save_task(task)
       end
 
@@ -42,16 +53,10 @@ module Ghwatch
         @log.info("[#{task.id}] #{role} -> #{data["status"]}#{": #{reason}" unless reason.empty?}")
       end
 
-      def wait_for_human(task, body, outcome, kind:, resume_state:, target: :issue)
-        @human_channel.wait(
-          task: task,
-          body: body,
-          outcome: outcome,
-          kind: kind,
-          resume_state: resume_state,
-          target: target
-        )
-        @issue_triage.request!
+      # Posts the question; the caller then reports the wait as its result.
+      def wait_for_human(task, body, outcome, kind:, target: :issue)
+        @human_channel.wait(task: task, body: body, outcome: outcome, kind: kind, target: target)
+        @issue_triage&.request!
       end
     end
   end

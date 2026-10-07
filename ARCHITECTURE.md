@@ -168,107 +168,115 @@ stateDiagram-v2
     done --> [*]
 ```
 
-## Transitions from action results
+## Transitions
 
-**Creation**
+The tables below are generated from `lib/ghwatch/state_machine.rb` (`rake docs`), the
+single place that changes a task's state; a test fails when they drift apart. Actions
+report a result, the engine reports events it observed on GitHub, and each row says what
+happens next. "Run now" makes the task due immediately; "retry after `retry_after`"
+schedules the next attempt.
 
-| Event | New task state |
-| --- | --- |
-| Triage starts an issue | `implementing` |
-| An open PR without a task is discovered (`review_all_open_prs`) | `waiting_for_review` (task without an issue) |
+Every action reports exactly one result; a result without a row is an error. Events are
+evaluated on every poll and before every action, in the row order of the reactions table;
+the first one with a rule for the task's group is applied.
 
-**Worker** (from worker states)
+<!-- BEGIN GENERATED: rake docs -->
+### Results
 
-| Result | Next state |
-| --- | --- |
-| `waiting_for_review` / `waiting_for_human_test` | `waiting_for_review` (a test request is handed to the reviewer) |
-| `waiting_for_human_input` | `waiting_for_human_input`, resuming the current state |
-| `continue` | `continuing` |
-| `done` | `finalizing` if the PR is merged, otherwise `waiting_for_review` |
-| `deferred` | `done`; the issue's assessment becomes `deferred` |
-| No PR found | `continuing` |
-| Failure | Fallback model; otherwise same state, retried after `retry_after` |
+**worker**
 
-**Reviewer** (from `waiting_for_review`)
+| Result | Next state and effects | Notes |
+| --- | --- | --- |
+| `waiting_for_review` | `waiting_for_review`; forget the last review; run now; triage again | Also for `waiting_for_human_test`: the test request goes to the reviewer |
+| `waiting_for_human_input` | `waiting_for_human_input`; resumes the current state; start waiting |  |
+| `continue` | `continuing`; retry after `retry_after` |  |
+| `done` | `waiting_for_review`; run now | The PR is open |
+| `merged` | `finalizing` (no issue: `done`); run now | `done` reported and the PR is already merged |
+| `deferred` | `done`; remove worktrees; triage again | The issue's assessment becomes `deferred` |
+| `no_pr` | `continuing`; retry after `retry_after` | Ready or done reported, but no PR exists |
+| `no_change` | unchanged; retry after `retry_after` | `continue` without any change to the repository or the PR |
+| `failed` | unchanged; retry after `retry_after` |  |
 
-| Result | Next state |
-| --- | --- |
-| PR is behind its base | Branch updated; same state, reviewed again immediately against the new head |
-| `deep_review` | The deep reviewer runs in the same step |
-| `merge` | `ready_to_merge` (with `auto_merge` off, it waits there for a person to merge) |
-| `changes_requested` | `changes_requested` |
-| `waiting_for_human_input` / `waiting_for_human_test` | Human wait, resuming `waiting_for_review` |
-| `comment` | `waiting_for_review` |
-| `retry` | Same state, retried after `retry_after` |
-| The PR changed during review | Same state, retried after `retry_after` |
-| Failure | Fallback model; otherwise retried after `retry_after` |
+**reviewer**
 
-After any review result, the same basis (head, comments, checks) is not reviewed again.
-Reviewers judge the change without waiting for CI; merging waits for required checks.
+| Result | Next state and effects | Notes |
+| --- | --- | --- |
+| `branch_updated` | unchanged; run now | The PR was behind its base and was updated; review the new head |
+| `merge` | `ready_to_merge`; run now | Approved; with `auto_merge` off a person merges |
+| `changes_requested` | `changes_requested`; run now |  |
+| `waiting_for_human_input` | `waiting_for_human_input`; resumes `waiting_for_review`; start waiting |  |
+| `waiting_for_human_test` | `waiting_for_human_test`; resumes `waiting_for_review`; start waiting |  |
+| `comment` | unchanged; retry after `retry_after` | Non-blocking; the same head is not reviewed again until something changes |
+| `retry` | unchanged; retry after `retry_after` |  |
+| `already_reviewed` | unchanged; retry after `retry_after` | Nothing changed since the last review of this head |
+| `pr_changed` | unchanged; retry after `retry_after` | The PR changed during the review |
+| `failed` | unchanged; retry after `retry_after` |  |
 
-**Merge step** (from `ready_to_merge`)
+**merge**
 
-| Condition | Next state |
-| --- | --- |
-| The PR changed after the review | `waiting_for_review` |
-| Checks still running | Same state; checked again on the next poll |
-| `auto_merge` off | Same state until a person merges |
-| GitHub refuses the merge for a reason other than checks | `waiting_for_human_input` on the PR with the reason, mentioning the maintainers |
-| Merged | `finalizing` (`done` for a task without an issue) |
+| Result | Next state and effects | Notes |
+| --- | --- | --- |
+| `pr_changed` | `waiting_for_review`; run now | The PR changed after the review |
+| `pending` | unchanged; retry after `retry_after` | Checks still running, or GitHub has not computed mergeability |
+| `manual` | unchanged; retry after `retry_after` | `auto_merge` is off; wait for a person to merge |
+| `refused` | `waiting_for_human_input`; resumes `waiting_for_review`; start waiting | GitHub refused the merge; ask on the PR with the reason |
+| `merged` | `finalizing` (no issue: `done`); remove the review workspace; triage again; run now |  |
 
-**Finalizer** (from `finalizing`)
+**finalizer**
 
-| Result | Next state |
-| --- | --- |
-| The PR is not merged | `waiting_for_review` if a PR exists, otherwise `continuing` |
-| `done` | `done` (closes the issue or comments on it) |
-| `waiting_for_human_input` / `waiting_for_human_test` | Human wait, resuming `finalizing` |
-| `retry` | Same state, retried after `retry_after` |
+| Result | Next state and effects | Notes |
+| --- | --- | --- |
+| `not_merged` | `waiting_for_review` (no PR: `continuing`); retry after `retry_after` | The PR is not merged after all |
+| `no_issue` | `done`; remove worktrees | A task without an issue has nothing to finish |
+| `done` | `done`; remove worktrees; triage again |  |
+| `waiting_for_human_input` | `waiting_for_human_input`; resumes `finalizing`; start waiting |  |
+| `waiting_for_human_test` | `waiting_for_human_test`; resumes `finalizing`; start waiting |  |
+| `retry` | unchanged; retry after `retry_after` |  |
+| `failed` | unchanged; retry after `retry_after` |  |
 
-## Reactions to outside events
-
-Evaluated on every poll, in the row order below; the first row that applies wins.
-"Wait (work)" and "Wait (finalizer)" are the two kinds of human wait.
+### Reactions
 
 | Event | Worker states | `waiting_for_review` | `ready_to_merge` | Wait (work) | Wait (finalizer) | `finalizing` |
 | --- | --- | --- | --- | --- | --- | --- |
-| Issue closed by someone | Close the PR with a comment, delete the branch and worktrees, `done` | same | same | same | `done` | `done` |
-| PR found | `waiting_for_review` (draft: record its number only) | — | — | Record its number | — | — |
-| PR not found | — | `continuing` | `continuing` | `continuing` | — | `continuing` |
-| PR merged | `finalizing` | `finalizing` | `finalizing` | `finalizing` | No change | No change |
-| PR closed unmerged | `implementing` (no issue: `done`) | same | same | same | — | — |
-| Conflict with base | Run the worker now | `changes_requested` | `changes_requested` | `changes_requested` | — | — |
-| Required checks failed | Run the worker now | Reviewer judges | `changes_requested`, once per head | `changes_requested`, once per head | — | — |
-| Someone pushed (head changed) | Run the worker now | Review again | `waiting_for_review` | `waiting_for_review` | — | — |
-| New human comment | Run the worker now (do not skip to review) | Review again | `waiting_for_review` | Resume, if after the question, on the PR or the issue | Resume, same rule | — |
-| Time passes | Rerun when the scheduled retry is due | Nothing (no review until the basis changes) | Check checks and mergeability | Nothing (no deadline, no reminder) | Nothing | Rerun when due |
-| Agent failure | Fallback model, then retry after `retry_after` | same | — | — | — | same |
+| PR merged | `finalizing` (no issue: `done`); clear the wait; remove the review workspace; run now | `finalizing` (no issue: `done`); clear the wait; remove the review workspace; run now | `finalizing` (no issue: `done`); clear the wait; remove the review workspace; run now | `finalizing` (no issue: `done`); clear the wait; remove the review workspace; run now | — | — |
+| Issue closed by someone (tasks ghwatch started) | `done`; clear the wait; close the PR, delete the branch and worktrees | `done`; clear the wait; close the PR, delete the branch and worktrees | `done`; clear the wait; close the PR, delete the branch and worktrees | `done`; clear the wait; close the PR, delete the branch and worktrees | `done`; clear the wait; remove worktrees | `done`; clear the wait; remove worktrees |
+| PR closed unmerged | `implementing` (no issue: `done`); clear the wait; forget the PR (tasks with an issue); remove the review workspace; run now | `implementing` (no issue: `done`); clear the wait; forget the PR (tasks with an issue); remove the review workspace; run now | `implementing` (no issue: `done`); clear the wait; forget the PR (tasks with an issue); remove the review workspace; run now | `implementing` (no issue: `done`); clear the wait; forget the PR (tasks with an issue); remove the review workspace; run now | — | — |
+| PR not found | — | `continuing` (no issue: unchanged); retry after `retry_after` | `continuing` (no issue: unchanged); retry after `retry_after` | `continuing` (no issue: unchanged); clear the wait; retry after `retry_after` | — | `continuing` (no issue: unchanged); retry after `retry_after` |
+| PR found | `waiting_for_review` (draft: unchanged); record the PR; run now | — | — | unchanged; record the PR | — | — |
+| Conflict with the base | unchanged; run now; only when newly observed | `changes_requested`; rework: conflict; forget the last review; run now | `changes_requested`; rework: conflict; forget the last review; run now | `changes_requested`; clear the wait; rework: conflict; forget the last review; run now | — | — |
+| Required checks failed | unchanged; run now; only when newly observed | — | `changes_requested`; rework: failed checks; forget the last review; run now; once per PR head | `changes_requested`; clear the wait; rework: failed checks; forget the last review; run now; once per PR head | — | — |
+| Someone pushed to the PR | unchanged; run now | unchanged; run now | `waiting_for_review`; run now | `waiting_for_review`; clear the wait; run now | — | — |
+| A person replied after the question (PR or issue) | — | — | — | the interrupted state; clear the wait; run now | the interrupted state; clear the wait; run now | — |
+| New comment or review by a person | unchanged; run now | unchanged; run now | `waiting_for_review`; run now | — | — | — |
+<!-- END GENERATED -->
 
-Notes:
+### Notes on reactions
 
-- Tasks without an issue (external PRs) follow the same rules, except "issue closed".
-- Leaving a human wait for any reason clears its marker, conversation and resume state.
+- A merge comes before the issue closing: merging a PR that says "Fixes #N" closes the
+  issue in the same moment, and that is not a reason to abandon the work. After the
+  merge (`finalizing` and the finalizer's waits), closing the issue counts only when it
+  happened after the task got there.
+- "Issue closed" applies only to tasks ghwatch started from an issue, never to an external
+  PR that merely links one.
+- A push or a comment is reported once: what was seen is recorded after every poll and
+  every action, so the task's own work is not news. "Only when newly observed" applies the
+  same to a conflict or failed checks that are still there.
 - A reply is any comment without a ghwatch marker posted after the question, on the PR or
   the issue. No agent of that task runs during the wait, so such comments are a person's.
-- Questions asked on a PR mention `github.human_mentions` (default: the repository owner).
-- "Once per head" means the same failed head is not sent back again, so a worker that
-  cannot fix it and asks a person is not caught in a loop.
+- `waiting_for_review` also counts a change in the PR's checks as activity, so a review
+  that waited for CI runs again when it finishes; the merge step looks at checks itself.
+- Time alone does nothing. Results schedule retries; a `waiting_for_review` task with
+  nothing scheduled is given a retry, and the reviewer skips a head it already reviewed.
+  Human waits have no deadline and no reminder.
+- Agent failures try the role's fallback models first (see README), then report `failed`.
 
 ## Differences from the current code
 
-Recorded on 2026-10-07 against commit `d3a2090`. Remove entries as they are implemented.
+Updated with the state machine (stage 1). Remove entries as they are implemented.
 
-| # | Gap in the current code | Target |
+| # | Gap | Status |
 | --- | --- | --- |
-| 1 | A human wait resumes only on a reply where the question was asked | Replies on the PR or the issue resume it |
-| 2 | `waiting_for_human_input` ignores conflicts; human waits ignore pushes | Both send the task on (see table) |
 | 3 | Human waits have no deadline | Unchanged by decision |
-| 4 | Closing the issue does not stop the task | Close the PR, delete the branch, `done` |
-| 5 | Merge or close during a human wait leaves its marker and resume state | Cleared whenever a wait is left |
-| 6 | With `auto_merge` off, an approved PR is reviewed again every `retry_after` | Wait in `ready_to_merge` for a person |
-| 7 | A merge GitHub refuses is retried forever | Human wait with the reason |
-| 8 | A PR comment during `changes_requested` returns to review before the worker runs | The worker runs |
-| 9 | Worker states do not react to conflicts, failed checks, pushes or comments until their retry | The worker runs now |
-| 10 | `waiting_for_re_review` exists but nothing enters it | Removed |
-| 11 | Reviews of an unchanged basis are skipped only after `comment` | After any review result |
-| 12 | State changes are spread over the engine and the actions | One transition table |
+| 11 | Reviews of an unchanged basis are skipped only after `comment`; other results rely on their own transitions | Stage 2: one recorded basis per decision, agents run only when it changes |
+| 13 | Each decision's basis is spread over ad hoc metadata (`commented_review`, `failed_checks_head`, `branch_updated_from`, `observed`, ...) | Stage 2 |
+| 14 | No history of decisions and transitions beyond the log | Stage 3: `task_events` table and `ghwatch log` |

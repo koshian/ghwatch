@@ -23,14 +23,14 @@ module Ghwatch
         record_workspace_changes(task, "after the #{role} run (#{outcome.signature})")
 
         unless outcome.success?
-          retry_failed_role(task, outcome)
+          retry_failed_role(task, outcome, role)
           return
         end
 
         current = TaskSnapshot.capture(task: task, github: @github).pull_request
         unless current && current["headRefOid"] == pull_request.fetch("headRefOid") && current["state"] == "OPEN"
           task.last_error = "PR changed during review; retry against its current head"
-          task.schedule_retry(after: @config.retry_after)
+          decide(task, role, "pr_changed")
           @state.save_task(task)
           return
         end
@@ -49,32 +49,44 @@ module Ghwatch
         snapshot = TaskSnapshot.capture(task: task, github: @github)
         pull_request = snapshot.pull_request || raise("PR ##{task.pr_number} is unavailable")
 
-        if task.last_review_signature != snapshot.review_signature
-          task.transition_to("waiting_for_review", retry_at: Time.now.to_i)
-          @state.save_task(task)
-          return
-        end
-
-        checks_ready = !@config.reviewer_requires_green_checks? || @github.checks_green?(pull_request)
-        unless checks_ready && @github.mergeable?(pull_request)
-          task.schedule_retry(after: @config.retry_after)
-          @state.save_task(task)
-          return
-        end
-
-        @github.merge_pull_request(task.pr_number, method: @config.merge_method)
-        @worktrees&.cleanup_review(task)
-        task.state = (task.issue_number || task.worktree) ? "finalizing" : "done"
-        task.retry_at = (task.state == "finalizing") ? Time.now.to_i : nil
-        @state.save_task(task)
-        @issue_triage.request!
-      rescue => e
-        task.last_error = e.message
-        task.schedule_retry(after: @config.retry_after)
+        result = merge_result(task, snapshot, pull_request)
+        decide(task, "merge", result)
         @state.save_task(task)
       end
 
       private
+
+      def merge_result(task, snapshot, pull_request)
+        return "pr_changed" if task.last_review_signature != snapshot.review_signature
+        return "manual" unless @config.auto_merge?
+
+        checks_ready = !@config.reviewer_requires_green_checks? || @github.checks_green?(pull_request)
+        return "pending" unless checks_ready && @github.mergeable?(pull_request)
+
+        begin
+          @github.merge_pull_request(task.pr_number, method: @config.merge_method)
+        rescue => e
+          task.last_error = "merge refused: #{e.message}"
+          ask_about_refused_merge(task, e.message)
+          return "refused"
+        end
+        task.last_error = nil
+        "merged"
+      end
+
+      def ask_about_refused_merge(task, message)
+        body = <<~TEXT
+          This PR was approved and its required checks passed, but GitHub refused to merge it:
+
+          ```
+          #{message.strip}
+          ```
+
+          Please resolve what blocks the merge (for example a required approval or branch protection) and reply here; the PR will be reviewed again and merged.
+        TEXT
+        outcome = Struct.new(:signature).new("ghwatch")
+        wait_for_human(task, body, outcome, kind: "human-question", target: :pull_request)
+      end
 
       # Reviews the PR as it would merge: a head behind its base is first
       # updated on GitHub, and the review runs against the new head. A refused
@@ -91,7 +103,7 @@ module Ghwatch
         @log.info("[#{task.id}] PR ##{task.pr_number} was behind its base; updated it before review")
         wait_for_new_head(task.pr_number, head)
         task.metadata["branch_updated_from"] = head
-        task.retry_at = Time.now.to_i
+        decide(task, "reviewer", "branch_updated")
         @state.save_task(task)
         true
       rescue => e
@@ -128,36 +140,28 @@ module Ghwatch
         initial_signature = @github.review_signature(pull_request)
         task.metadata.delete("commented_review")
 
+        role = outcome.respond_to?(:role) ? (outcome.role || "reviewer") : "reviewer"
         case data["status"]
         when "merge"
           post_review_body(task, data["body"], outcome, kind: "review-ok")
           task.last_review_signature = refreshed_review_signature(task, fallback: initial_signature)
-          if @config.auto_merge?
-            task.state = "ready_to_merge"
-            task.retry_at = Time.now.to_i
-          else
-            task.state = "waiting_for_review"
-          end
         when "changes_requested"
           post_review_body(task, data.fetch("body"), outcome, kind: "changes-requested")
           task.last_review_signature = refreshed_review_signature(task, fallback: initial_signature)
-          task.state = "changes_requested"
-          task.retry_at = Time.now.to_i
         when "waiting_for_human_input", "waiting_for_human_test"
           task.last_review_signature = initial_signature
           kind = (data["status"] == "waiting_for_human_input") ? "human-question" : "human-test"
-          wait_for_human(task, data.fetch("body"), outcome, kind: kind, resume_state: "waiting_for_review", target: :pull_request)
+          wait_for_human(task, data.fetch("body"), outcome, kind: kind, target: :pull_request)
         when "comment"
           post_review_body(task, data.fetch("body"), outcome, kind: "review-comment")
           task.last_review_signature = refreshed_review_signature(task, fallback: initial_signature)
           remember_comment(task, pull_request)
-          task.state = "waiting_for_review"
-          task.schedule_retry(after: @config.retry_after)
         when "retry"
-          task.schedule_retry(after: @config.retry_after)
+          nil
         else
           raise "unknown review status #{data["status"].inspect}"
         end
+        decide(task, role, data["status"])
       end
 
       def post_review_body(task, body, outcome, kind:)
@@ -184,7 +188,7 @@ module Ghwatch
 
         @log.info("[#{task.id}] PR ##{task.pr_number} already reviewed at this head; waiting for " \
           "#{unchanged ? "new activity" : "its checks to finish"}")
-        task.schedule_retry(after: @config.retry_after)
+        decide(task, "reviewer", "already_reviewed")
         @state.save_task(task)
         true
       end

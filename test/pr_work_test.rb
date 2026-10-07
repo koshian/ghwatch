@@ -44,7 +44,7 @@ class PrWorkTest < Minitest::Test
       state: State.new(tasks), github: github, worker_action: worker,
       reviewer_action: reviewer, finalizer_action: finalizer,
       human_channel: OpenStruct.new(reply_received?: false),
-      config: OpenStruct.new(retry_after: 60), log: Ghwatch::Log.new(StringIO.new)
+      config: OpenStruct.new(retry_after: 60), log: Ghwatch::Log.new(ENV["DEBUG_LOG"] ? $stdout : StringIO.new)
     )
   end
 
@@ -75,7 +75,7 @@ class PrWorkTest < Minitest::Test
     assert_nil waiting.human_marker
     assert_includes waiting.metadata["rework_reason"], "macOS ARM64"
     assert_equal "changes_requested", merging.state
-    refute_equal "changes_requested", external.state, "an external PR has no worker to return to"
+    assert_equal "changes_requested", external.state, "the worker reworks external PRs too"
 
     # The worker could not push a fix and a person is asked again: not repeated for the same head.
     waiting.state = "waiting_for_human_input"
@@ -147,6 +147,8 @@ class PrWorkTest < Minitest::Test
         task.transition_to("done")
       else
         events << [:review, task.pr_number]
+        # Like the real reviewer, remember what was approved.
+        task.last_review_signature = github.review_signature(github.prs[task.pr_number])
         task.transition_to("ready_to_merge", retry_at: 0)
       end
     end
@@ -237,13 +239,14 @@ class PrWorkTest < Minitest::Test
     assert_equal [174, 164, :triage, 170, :issue], events
   end
 
-  def test_unknown_draft_and_actual_human_input_waits_do_not_trigger_conflict_rework
-    %w[UNKNOWN CONFLICTING].each do |mergeable|
+  def test_conflicts_end_human_waits_but_unknown_mergeability_and_drafts_do_not
+    {"UNKNOWN" => "waiting_for_human_input", "CONFLICTING" => "changes_requested"}.each do |mergeable, expected|
       task = Ghwatch::Task.for_pr(164)
       task.state = "waiting_for_human_input"
+      task.metadata["resume_state"] = "waiting_for_review"
       machine = engine([task], github: Github.new([pr(164, mergeable: mergeable)]), worker: nil)
       machine.reconcile_all
-      assert_equal "waiting_for_human_input", task.state
+      assert_equal expected, task.state
     end
     task = Ghwatch::Task.for_pr(164)
     task.state = "waiting_for_human_test"
@@ -312,52 +315,46 @@ class PrWorkTest < Minitest::Test
     assert task.done?
   end
 
-  def test_new_pr_reply_resumes_review_despite_worker_retry_and_is_not_replayed
-    task = Ghwatch::Task.for_pr(167)
-    task.state = "changes_requested"
-    task.last_error = "protocol: agent did not emit a ghwatch result"
-    task.retry_at = Time.now.to_i + 3_600
-    pull_request = pr(167).merge("comments" => [
-      {"id" => 1, "body" => "old human reply"},
-      {"id" => 2, "body" => "Prepare environment <!-- ghwatch:changes-requested:marker -->"},
-      {"id" => 3, "body" => "Please review again"}
-    ])
-    github = Github.new([pull_request])
-    reviews = 0
-    reviewer = Action.new do |item|
-      reviews += 1
-      item.transition_to("changes_requested", retry_at: Time.now.to_i + 60)
-    end
-    machine = engine([task], github: github, worker: nil, reviewer: reviewer)
-    machine.reconcile_all
-    assert_equal "waiting_for_review", task.state
-    assert_nil task.last_error
-    assert task.retry_due?
-    machine.run_due
-    assert_equal 1, reviews
-    assert_equal 3, task.metadata["last_rework_reply_id"]
-    machine.reconcile_all
-    assert_equal "changes_requested", task.state
-    refute task.retry_due?
-  end
-
-  def test_old_or_ghwatch_comments_and_conflicts_do_not_interrupt_rework
+  def test_a_reply_during_rework_runs_the_worker_instead_of_skipping_to_review
     task = Ghwatch::Task.for_pr(167)
     task.state = "changes_requested"
     task.retry_at = Time.now.to_i + 3_600
     pull_request = pr(167).merge("comments" => [
       {"id" => 1, "body" => "old human reply"},
-      {"id" => 2, "body" => "Fix code <!-- ghwatch:changes-requested:marker -->"},
-      {"id" => 3, "body" => "Automated feedback <!-- ghwatch:review-comment:marker -->"}
+      {"id" => 2, "body" => "Prepare environment <!-- ghwatch:changes-requested:marker -->"}
     ])
     machine = engine([task], github: Github.new([pull_request]), worker: nil)
     machine.reconcile_all
+    refute task.retry_due?, "what was there before is not news"
+
+    pull_request["comments"] << {"id" => 3, "body" => "Please review again"}
+    machine.reconcile_all
     assert_equal "changes_requested", task.state
-    pull_request["comments"] << {"id" => 4, "body" => "review again"}
-    pull_request["mergeable"] = "CONFLICTING"
+    assert task.retry_due?
+  end
+
+  def test_ghwatch_comments_do_not_interrupt_rework_but_people_and_new_conflicts_do
+    task = Ghwatch::Task.for_pr(167)
+    task.state = "changes_requested"
+    task.retry_at = Time.now.to_i + 3_600
+    pull_request = pr(167).merge("comments" => [
+      {"id" => 1, "body" => "old human reply"},
+      {"id" => 2, "body" => "Fix code <!-- ghwatch:changes-requested:marker -->"}
+    ])
+    machine = engine([task], github: Github.new([pull_request]), worker: nil)
+    machine.reconcile_all
+    pull_request["comments"] << {"id" => 3, "body" => "Automated feedback <!-- ghwatch:review-comment:marker -->"}
     machine.reconcile_all
     assert_equal "changes_requested", task.state
     refute task.retry_due?
+
+    pull_request["mergeable"] = "CONFLICTING"
+    machine.reconcile_all
+    assert_equal "changes_requested", task.state
+    assert task.retry_due?
+    task.retry_at = Time.now.to_i + 3_600
+    machine.reconcile_all
+    refute task.retry_due?, "a conflict already seen does not rerun the worker every poll"
   end
 
   def test_reconcile_releases_workspaces_only_for_human_waits_and_tolerates_failures

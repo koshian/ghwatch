@@ -53,7 +53,7 @@ module Ghwatch
     def issue(number)
       gh_json(
         "issue", "view", number.to_s,
-        "--json", "number,title,body,state,updatedAt,url,author,labels,assignees"
+        "--json", "number,title,body,state,updatedAt,closedAt,url,author,labels,assignees"
       ).merge(
         "authorAssociation" => gh_api("repos/#{repo_name}/issues/#{number}")["author_association"],
         "comments" => issue_comments(number)
@@ -172,6 +172,18 @@ module Ghwatch
 
       encoded = URI.encode_www_form_component(label).gsub("+", "%20")
       gh("api", "--method", "DELETE", "repos/#{repo_name}/issues/#{number}/labels/#{encoded}")
+    end
+
+    def close_pull_request(number, comment: nil)
+      gh("pr", "close", number.to_s, *(comment ? ["--comment", comment] : []))
+    end
+
+    # Deletes a branch on GitHub; a branch already gone is fine.
+    def delete_branch(branch)
+      encoded = branch.split("/").map { |part| URI.encode_www_form_component(part) }.join("/")
+      gh("api", "--method", "DELETE", "repos/#{repo_name}/git/refs/heads/#{encoded}")
+    rescue => e
+      raise unless e.message.match?(/Reference does not exist|Not Found|422|404/)
     end
 
     def merge_pull_request(number, method: "merge")
