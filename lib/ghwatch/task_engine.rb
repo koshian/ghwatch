@@ -95,6 +95,7 @@ module Ghwatch
         end
         # An action that keeps the state but asks to run again now (e.g. after
         # updating the PR branch) continues here, before other work.
+        @log.info("[#{task.id}] #{previous_state} -> #{task.state}") if task.state != previous_state
         return if task.state == previous_state && (task.retry_at == previous_retry_at || !action_due?(task))
       end
 

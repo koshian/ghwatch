@@ -26,6 +26,20 @@ module Ghwatch
       def remember_outcome(task, outcome)
         task.attempts += 1
         task.last_model = outcome.signature
+        log_outcome(task, outcome)
+      end
+
+      # One line per role run, so the log says what each run decided.
+      def log_outcome(task, outcome)
+        role = outcome.respond_to?(:role) ? outcome.role : "role"
+        unless outcome.success?
+          @log.info("[#{task.id}] #{role} failed (#{outcome.error_kind})")
+          return
+        end
+
+        data = outcome.data || {}
+        reason = data["reason"].to_s.lines.first.to_s.strip
+        @log.info("[#{task.id}] #{role} -> #{data["status"]}#{": #{reason}" unless reason.empty?}")
       end
 
       def wait_for_human(task, body, outcome, kind:, resume_state:, target: :issue)

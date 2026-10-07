@@ -156,7 +156,9 @@ module Ghwatch
         waiting_for_human_test must contain precise test instructions in body and identify
         the related issue when known. comment is for a review that cannot decide yet and does
         not authorize merge; the same head is not reviewed again until something changes.
-        While required CI checks are still running, do not post a review: return retry.
+        Do not wait for CI and do not return comment or retry only because checks are still
+        running: judge the change. ghwatch merges only after the required checks pass and
+        sends the PR back to the worker if they fail. Mention unfinished checks in the body.
 
         For development-environment blockers such as missing OS packages, use
         waiting_for_human_input, not changes_requested or waiting_for_human_test. In body,

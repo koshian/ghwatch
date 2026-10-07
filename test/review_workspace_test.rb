@@ -190,6 +190,24 @@ class ReviewWorkspaceTest < Minitest::Test
     roles.verify
   end
 
+  def test_each_review_run_logs_its_decision
+    worktrees = Minitest::Mock.new
+    worktrees.expect(:prepare_review, "/review/pr-167") { |task, pr, **options| true }
+    roles = Minitest::Mock.new
+    outcome = Ghwatch::RoleRunner::Outcome.new(success: true, role: "deep_reviewer", runner: "test", model: "test",
+      data: {"status" => "changes_requested", "body" => "", "reason" => "CI step fails on macOS\nmore"},
+      error_kind: nil, error: nil, raw_output: "")
+    roles.expect(:run, outcome) { |role, **options| true }
+    log = StringIO.new
+    reviewer = Ghwatch::Actions::Reviewer.new(
+      worktrees: worktrees, project: nil, config: @config, state: @state,
+      github: @github, roles: roles, context_builder: Ghwatch::ContextBuilder.new(config: @config),
+      human_channel: nil, issue_triage: nil, log: Ghwatch::Log.new(log)
+    )
+    reviewer.run(@task)
+    assert_includes log.string, "[pr-167] deep_reviewer -> changes_requested: CI step fails on macOS\n"
+  end
+
   private
 
   def reviewer_with(worktrees, roles)
