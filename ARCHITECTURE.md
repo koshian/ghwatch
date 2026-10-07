@@ -38,7 +38,11 @@ still missing. When code and document disagree, decide which is wrong and fix on
 "from work" when the worker or reviewer asked (resume state is a worker or review state),
 and "from the finalizer" when the finalizer asked (resume state is `finalizing`).
 
-## Diagram
+## Diagrams
+
+### Overall
+
+Every transition in one picture; dense, but useful for checking that nothing is missing.
 
 ```mermaid
 stateDiagram-v2
@@ -93,7 +97,76 @@ stateDiagram-v2
     done --> [*]
 ```
 
-The diagram shows the main paths. The tables below are complete and take precedence.
+The diagrams show the paths; the tables below are complete and take precedence.
+
+### Main path
+
+The usual course of an issue, without waits or exceptions.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    [*] --> implementing: triage starts an issue
+    implementing --> continuing: worker continues
+    implementing --> waiting_for_review: PR ready
+    continuing --> waiting_for_review: PR ready
+    [*] --> waiting_for_review: open PR discovered
+    waiting_for_review --> changes_requested: changes requested
+    changes_requested --> waiting_for_review: reworked
+    waiting_for_review --> ready_to_merge: approved
+    ready_to_merge --> waiting_for_review: PR changed
+    ready_to_merge --> finalizing: merged
+    finalizing --> done: issue finished
+    done --> [*]
+```
+
+### Human waits
+
+Where a task starts waiting for a person and what ends the wait. A wait from work and a
+wait from the finalizer use the same two states, told apart by their resume state.
+
+```mermaid
+stateDiagram-v2
+    direction LR
+    state "Worker states" as work
+    state "waiting_for_review" as review
+    state "ready_to_merge" as merge
+    state "finalizing" as final
+    state "Wait from work" as wait_work {
+        direction TB
+        waiting_for_human_input
+        waiting_for_human_test
+    }
+    state "Wait from the finalizer" as wait_final {
+        direction TB
+        input_f: waiting_for_human_input
+        test_f: waiting_for_human_test
+    }
+    work --> wait_work: worker asks
+    review --> wait_work: reviewer asks or requests a test
+    merge --> wait_work: merge refused
+    wait_work --> review: reply on PR or issue, or a push
+    wait_work --> work: worker asked and a reply came
+    wait_work --> changes_requested: conflict or failed checks
+    final --> wait_final: finalizer asks or requests a test
+    wait_final --> final: reply on PR or issue
+```
+
+### Outside events
+
+Events that apply to whole groups of states. Each box stands for the states listed in it.
+
+```mermaid
+stateDiagram-v2
+    state "PR open<br/>(worker states, waiting_for_review,<br/>ready_to_merge, wait from work)" as open
+    state "After merge<br/>(finalizing, wait from the finalizer)" as after
+    open --> after: PR merged
+    open --> implementing: PR closed unmerged (no issue - done)
+    open --> continuing: PR not found
+    open --> done: issue closed (PR closed, branch deleted)
+    after --> done: issue closed, or finalizer done
+    done --> [*]
+```
 
 ## Transitions from action results
 
