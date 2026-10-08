@@ -3,6 +3,9 @@
 module Ghwatch
   class TaskEngine
     MAX_ACTIONS_PER_TASK = 6
+    # Between actions, everything is looked at again when this much time has
+    # passed, so a reply on one task is not stuck behind a backlog of others.
+    RECONCILE_INTERVAL = 60
 
     def initialize(state:, github:, human_channel:, worker_action:, reviewer_action:, finalizer_action:, config:,
       worktrees: nil, log: Log.new, machine: nil, observer: nil)
@@ -20,6 +23,7 @@ module Ghwatch
     end
 
     def reconcile_all
+      @reconciled_at = Time.now
       active_tasks.each { |task| reconcile(task) }
     end
 
@@ -41,18 +45,29 @@ module Ghwatch
       run_pull_requests(stop_requested: stop_requested) unless scope == :issues
       return if scope == :pull_requests
 
+      ran_issue = false
       active_tasks.reject(&:pr_number).each do |task|
         break if stop_requested.call
 
+        # Work on PRs, and replies that arrived meanwhile, goes before the
+        # next issue.
+        run_pull_requests(stop_requested: stop_requested, after_other_work: ran_issue) unless scope == :issues
+        break if stop_requested.call
+        next if task.pr_number || task.done?
+
         run_task_safely(task, stop_requested: stop_requested)
+        ran_issue = true
       end
     end
 
     private
 
-    def run_pull_requests(stop_requested:)
+    def run_pull_requests(stop_requested:, after_other_work: false)
       processed = []
       until stop_requested.call
+        if (processed.any? || after_other_work) && (@reconciled_at.nil? || Time.now - @reconciled_at >= RECONCILE_INTERVAL)
+          reconcile_all
+        end
         task = active_tasks.select { |candidate| candidate.pr_number && !processed.include?(candidate.id) && action_due?(candidate) }
           .min_by(&:pr_number)
         break unless task

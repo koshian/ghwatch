@@ -57,6 +57,7 @@ class SchedulingTest < Minitest::Test
     def github.issue_signature(issue) = "issue"
     def github.pull_request(number) = {"number" => number, "state" => "OPEN", "headRefOid" => "head", "comments" => []}
     def github.pr_signature(pr) = "pr"
+    def github.pull_request_for_branch(branch) = nil
     def github.review_signature(pr) = "review"
     engine = Ghwatch::TaskEngine.new(
       state: Struct.new(:tasks) { def save_task(task) = task }.new([issue, waiting, rework, later]), github: github,

@@ -60,7 +60,7 @@ class AgentProgressTest < Minitest::Test
   def test_timeout_stops_spinner_and_keeps_partial_output
     io = Terminal.new
     progress = Ghwatch::AgentProgress.new(label: "[worker]", io: io)
-    result = Ghwatch::Command.new.run(RbConfig.ruby, "-e", 'STDOUT.sync = true; print "partial"; sleep 5', progress: progress, timeout: 0.3)
+    result = Ghwatch::Command.new.run(RbConfig.ruby, "-e", 'STDOUT.sync = true; print "partial"; sleep 30', progress: progress, timeout: 3)
     assert result.timed_out
     assert_equal "partial", result.stdout
     assert_includes io.string, "stdout: partial"

@@ -16,6 +16,8 @@ class PrWorkTest < Minitest::Test
 
     def pull_request(number) = prs.fetch(number)
 
+    def pull_request_for_branch(branch) = nil
+
     def issue(number) = {"number" => number, "state" => "OPEN"}
   end
 
@@ -82,6 +84,34 @@ class PrWorkTest < Minitest::Test
     waiting.metadata["resume_state"] = "waiting_for_review"
     machine.reconcile_all
     assert_equal "waiting_for_human_input", waiting.state
+  end
+
+  def test_a_reply_that_arrives_during_a_backlog_of_reviews_is_handled_next
+    waiting = Ghwatch::Task.for_issue(234, branch: "b", worktree: nil)
+    waiting.pr_number = 235
+    waiting.state = "waiting_for_human_test"
+    waiting.human_marker = "<!-- ghwatch:human-test:q -->"
+    waiting.metadata["resume_state"] = "waiting_for_review"
+    backlog = [239, 240].map do |number|
+      Ghwatch::Task.for_pr(number).tap { |task| task.retry_at = 0 }
+    end
+    issue_comments = [{"id" => 10, "body" => "Please test <!-- ghwatch:human-test:q -->"}]
+    github = Github.new([pr(235), pr(239), pr(240)])
+    github.define_singleton_method(:issue) { |number| {"number" => number, "state" => "OPEN", "comments" => issue_comments} }
+    now = Time.now
+    reviewed = []
+    reviewer = Action.new do |task|
+      reviewed << task.pr_number
+      # The reporter answers while #239 is being reviewed, which takes a while.
+      issue_comments << {"id" => 11, "body" => "It works now."} if task.pr_number == 239
+      now += 600
+      task.transition_to("waiting_for_human_test")
+      task.metadata["resume_state"] = "waiting_for_review"
+    end
+    machine = engine([waiting, *backlog], github: github, worker: nil, reviewer: reviewer)
+    machine.reconcile_all
+    Time.stub(:now, -> { now }) { machine.run_due(scope: :pull_requests) }
+    assert_equal [239, 235, 240], reviewed
   end
 
   def test_a_merged_pr_does_not_restart_finalizing_or_its_human_wait
@@ -287,11 +317,13 @@ class PrWorkTest < Minitest::Test
       calls += 1
       item.transition_to("waiting_for_review", retry_at: 0)
     }
+    github = Github.new([pr(164)])
     reviewer = Action.new { |item|
       calls += 1
+      item.last_review_signature = github.review_signature(github.prs[164])
       item.transition_to("changes_requested", retry_at: 0)
     }
-    machine = engine([task], github: Github.new([pr(164)]), worker: worker, reviewer: reviewer)
+    machine = engine([task], github: github, worker: worker, reviewer: reviewer)
     machine.run_due(scope: :pull_requests)
     assert_equal Ghwatch::TaskEngine::MAX_ACTIONS_PER_TASK, calls
     assert task.retry_at
