@@ -181,6 +181,9 @@ module Ghwatch
         maintainer accepted it. From the person who was asked, a short confirmation such as "OK"
         or "it works" is a passing result for what was asked; do not demand a more detailed
         report. Ask again only when they report a problem or clearly did not try what was asked.
+        Do not add checks that were not in the request: when the answer covers it, the person's
+        part is done, and anything else is yours to verify or to note as non-blocking. A merge of
+        the base branch since the request does not undo their check of the PR's changes.
 
         Address every point of it and say how. Images in it are part of the answer: download
         them with authentication, for example
