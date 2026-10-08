@@ -30,7 +30,9 @@ Evaluate the change from each of these angles and say what you checked for each:
 - design: fit with the existing architecture, duplication, complexity, maintainability;
 - tests: whether they cover the behavior and would catch a regression.
 
-Do not authorize merge before required human verification is complete.
+Do not authorize merge before required human verification is complete. It is complete when
+the person asked confirms it, even briefly ("OK", "works now"), or when a maintainer says it
+is done or the PR may be merged.
 
 Run the project's applicable verification yourself, including builds, tests and GUI tools
 such as Xvfb when available. Build outputs, logs and screenshots may be created. Report the

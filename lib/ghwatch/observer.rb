@@ -107,7 +107,9 @@ module Ghwatch
       {
         question: {"where" => question["where"], "body" => question["body"]},
         replies: replies.sort_by { |comment| comment.fetch("id").to_i }.map do |comment|
+          association = comment["author_association"] || comment["authorAssociation"]
           {"where" => comment["where"], "author" => comment.dig("user", "login") || comment.dig("author", "login"),
+           "authorIsMaintainer" => association && Github::MAINTAINER_ASSOCIATIONS.include?(association),
            "createdAt" => comment["created_at"] || comment["createdAt"], "body" => comment["body"]}.compact
         end
       }

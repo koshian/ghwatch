@@ -98,7 +98,7 @@ module Ghwatch
         Check correctness, regressions, error handling, concurrency/resources where relevant,
         maintainability, test coverage, and whether the implementation actually satisfies the
         issue. If project policy requires human verification, do not authorize merge until that
-        report exists.
+        report exists or a maintainer has declared it done.
         Complete this code review in every pass, even when another blocker such as pending CI,
         missing test preparation or a needed test build already prevents merge. Report every
         blocking problem you find in one result so the worker can fix them in a single round.
@@ -174,6 +174,13 @@ module Ghwatch
         was posted somewhere other than where the request was:
 
         #{JSON.pretty_generate(answer)}
+
+        Who answered matters. A maintainer (authorIsMaintainer: true) settles what they decide:
+        if a maintainer says the check is done or the PR may be merged, do not ask again; go on
+        (merge when the change is otherwise acceptable) and record in the review that a
+        maintainer accepted it. From the person who was asked, a short confirmation such as "OK"
+        or "it works" is a passing result for what was asked; do not demand a more detailed
+        report. Ask again only when they report a problem or clearly did not try what was asked.
 
         Address every point of it and say how. Images in it are part of the answer: download
         them with authentication, for example

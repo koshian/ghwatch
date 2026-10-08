@@ -16,7 +16,7 @@ class HumanAnswerTest < Minitest::Test
     ]}
     pull_request = {"number" => 230, "state" => "OPEN", "headRefOid" => "h", "comments" => [
       {"id" => 5, "user" => {"login" => "cosepi"}, "body" => "before the question"},
-      {"id" => 11, "user" => {"login" => "cosepi"}, "created_at" => "2026-10-07T04:55:26Z",
+      {"id" => 11, "user" => {"login" => "cosepi"}, "author_association" => "NONE", "created_at" => "2026-10-07T04:55:26Z",
        "body" => "![](https://github.com/user-attachments/assets/a) Settings: cannot see the cursor."},
       {"id" => 12, "user" => {"login" => "koshian"}, "body" => "review <!-- ghwatch:review-comment:x -->"}
     ]}
@@ -26,7 +26,7 @@ class HumanAnswerTest < Minitest::Test
     events = Ghwatch::Observer.new(github: nil, config: config).events(task, snapshot)
     answer = events.fetch("reply")
     assert_equal "issue #219", answer[:question]["where"]
-    assert_equal [{"where" => "PR #230", "author" => "cosepi", "createdAt" => "2026-10-07T04:55:26Z",
+    assert_equal [{"where" => "PR #230", "author" => "cosepi", "authorIsMaintainer" => false, "createdAt" => "2026-10-07T04:55:26Z",
                    "body" => "![](https://github.com/user-attachments/assets/a) Settings: cannot see the cursor."}], answer[:replies]
 
     machine = Ghwatch::StateMachine.new(github: nil, config: config, log: Ghwatch::Log.new(StringIO.new))
@@ -36,6 +36,7 @@ class HumanAnswerTest < Minitest::Test
     assert_includes context, "A person answered ghwatch's last request"
     assert_includes context, "Settings: cannot see the cursor."
     assert_includes context, "not against the scope the PR chose"
+    assert_includes context, "A maintainer (authorIsMaintainer: true) settles what they decide"
 
     # A new question supersedes the old answer.
     task.state = "waiting_for_review"
