@@ -21,7 +21,7 @@ module Ghwatch
       # Actions decide; the state machine changes the state.
       def machine
         @machine ||= StateMachine.new(github: @github, config: @config, worktrees: @worktrees,
-          issue_triage: @issue_triage, log: @log)
+          issue_triage: @issue_triage, human_channel: @human_channel, log: @log)
       end
 
       def decide(task, role, result, context = {})

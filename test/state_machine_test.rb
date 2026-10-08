@@ -219,6 +219,56 @@ class StateMachineTest < Minitest::Test
     assert_equal 9, task.pr_number
   end
 
+  class HumanChannel
+    attr_reader :asked
+
+    def initialize = @asked = []
+
+    def wait(task:, body:, outcome:, kind:, target:)
+      @asked << [target, body]
+      task.human_marker = "marker"
+    end
+  end
+
+  def test_after_three_rework_rounds_a_person_decides_and_conflicts_do_not_count
+    channel = HumanChannel.new
+    @machine.human_channel = channel
+    task = task_in(:review)
+    Ghwatch::StateMachine::REWORK_LIMIT.times do
+      @machine.apply_result(task, "reviewer", "changes_requested")
+      assert_equal "changes_requested", task.state
+      @machine.react(task, {"conflict" => {new: true}}) # worker state: runs now, not counted
+      task.state = "waiting_for_review"
+    end
+    @machine.react(task, {"conflict" => {}})
+    assert_equal "changes_requested", task.state, "a conflict is not a round"
+    task.state = "ready_to_merge"
+    @machine.react(task, {"checks_failed" => {head: "h9", failed: ["CI"]}})
+    assert_equal "waiting_for_human_input", task.state
+    assert_equal "changes_requested", task.metadata["resume_state"]
+    assert_equal :pull_request, channel.asked.last.first
+    assert_includes channel.asked.last.last, "3"
+
+    @machine.react(task, {"reply" => {question: {}, replies: []}})
+    assert_equal "changes_requested", task.state
+    refute task.metadata.key?("rework_rounds"), "a reply gives a fresh set of rounds"
+  end
+
+  def test_three_continues_in_a_row_ask_a_person_and_any_other_result_resets_them
+    channel = HumanChannel.new
+    @machine.human_channel = channel
+    task = Ghwatch::Task.for_issue(7, branch: "b", worktree: nil)
+    @machine.apply_result(task, "worker", "continue")
+    @machine.apply_result(task, "worker", "no_change")
+    @machine.apply_result(task, "worker", "continue")
+    @machine.apply_result(task, "worker", "continue")
+    assert_equal "continuing", task.state
+    @machine.apply_result(task, "worker", "continue")
+    assert_equal "waiting_for_human_input", task.state
+    assert_equal "continuing", task.metadata["resume_state"]
+    assert_equal :issue, channel.asked.last.first, "no PR yet: ask on the issue"
+  end
+
   def test_architecture_document_matches_the_tables
     document = File.read(File.expand_path("../ARCHITECTURE.md", __dir__))
     generated = document[/#{Regexp.escape(Ghwatch::StateMachine::DOC_BEGIN)}\n(.*?)#{Regexp.escape(Ghwatch::StateMachine::DOC_END)}/mo, 1]

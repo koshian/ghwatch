@@ -8,6 +8,11 @@ module Ghwatch
   # StateMachine.markdown, and a test keeps the two in step.
   class StateMachine
     WORKER_STATES = Task::WORKER_STATES
+    # Rounds of rework a PR may go through (review changes or failed checks;
+    # conflicts do not count) and passes a worker may report `continue` in a
+    # row, before a person is asked how to go on.
+    REWORK_LIMIT = 3
+    CONTINUE_LIMIT = 3
 
     # Groups of states that react alike. A human wait belongs to the work it
     # interrupted unless the finalizer asked.
@@ -28,6 +33,10 @@ module Ghwatch
     #   :continuing_or_keep      continuing; unchanged for a task without an issue
     #   :review_unless_draft     waiting_for_review unless the PR is a draft
     #   :review_or_continuing    waiting_for_review if a PR exists, else continuing
+    #   :rework_or_escalate      changes_requested, or after REWORK_LIMIT
+    #                            rounds a question to a person on the PR
+    #   :continuing_or_escalate  continuing, or after CONTINUE_LIMIT passes in
+    #                            a row a question to a person
     # resume: for a human wait, the state to return to (:current = the state
     # the task is in when it starts waiting).
     # guard: :new applies only when the condition is newly observed;
@@ -55,14 +64,17 @@ module Ghwatch
       abandon_pr: "close the PR, delete the branch and worktrees",
       rework_conflict: "rework: conflict",
       rework_failed_checks: "rework: failed checks",
-      request_triage: "triage again"
+      request_triage: "triage again",
+      count_rework: "count a rework round",
+      count_continue: "count a `continue`",
+      reset_rounds: "reset the rework and `continue` counts"
     }.freeze
 
     RESULTS = {
       "worker" => {
         "waiting_for_review" => rule("waiting_for_review", :reset_review, :run_now, :request_triage),
         "waiting_for_human_input" => rule("waiting_for_human_input", :start_wait, resume: :current),
-        "continue" => rule("continuing", :retry_later),
+        "continue" => rule(:continuing_or_escalate, :count_continue, :retry_later),
         "done" => rule("waiting_for_review", :run_now),
         "merged" => rule(:finalizing_or_done, :run_now),
         "deferred" => rule("done", :cleanup, :request_triage),
@@ -73,7 +85,7 @@ module Ghwatch
       "reviewer" => {
         "branch_updated" => rule(nil, :run_now),
         "merge" => rule("ready_to_merge", :run_now),
-        "changes_requested" => rule("changes_requested", :run_now),
+        "changes_requested" => rule(:rework_or_escalate, :count_rework, :run_now),
         "waiting_for_human_input" => rule("waiting_for_human_input", :start_wait, resume: "waiting_for_review"),
         "waiting_for_human_test" => rule("waiting_for_human_test", :start_wait, resume: "waiting_for_review"),
         "comment" => rule(nil, :retry_later),
@@ -125,10 +137,10 @@ module Ghwatch
     # a PR that says "Fixes #N" closes the issue too.
     REACTIONS = [
       ["pr_merged", "PR merged", {
-        worker: rule(:finalizing_or_done, :clear_wait, :cleanup_review, :run_now),
-        review: rule(:finalizing_or_done, :clear_wait, :cleanup_review, :run_now),
-        merge: rule(:finalizing_or_done, :clear_wait, :cleanup_review, :run_now),
-        wait_work: rule(:finalizing_or_done, :clear_wait, :cleanup_review, :run_now)
+        worker: rule(:finalizing_or_done, :clear_wait, :reset_rounds, :cleanup_review, :run_now),
+        review: rule(:finalizing_or_done, :clear_wait, :reset_rounds, :cleanup_review, :run_now),
+        merge: rule(:finalizing_or_done, :clear_wait, :reset_rounds, :cleanup_review, :run_now),
+        wait_work: rule(:finalizing_or_done, :clear_wait, :reset_rounds, :cleanup_review, :run_now)
       }],
       ["issue_closed", "Issue closed by someone (tasks ghwatch started)", {
         worker: rule("done", :clear_wait, :abandon_pr),
@@ -139,10 +151,10 @@ module Ghwatch
         finalizing: rule("done", :clear_wait, :cleanup)
       }],
       ["pr_closed", "PR closed unmerged", {
-        worker: rule(:implementing_or_done, :clear_wait, :forget_pr, :cleanup_review, :run_now),
-        review: rule(:implementing_or_done, :clear_wait, :forget_pr, :cleanup_review, :run_now),
-        merge: rule(:implementing_or_done, :clear_wait, :forget_pr, :cleanup_review, :run_now),
-        wait_work: rule(:implementing_or_done, :clear_wait, :forget_pr, :cleanup_review, :run_now)
+        worker: rule(:implementing_or_done, :clear_wait, :reset_rounds, :forget_pr, :cleanup_review, :run_now),
+        review: rule(:implementing_or_done, :clear_wait, :reset_rounds, :forget_pr, :cleanup_review, :run_now),
+        merge: rule(:implementing_or_done, :clear_wait, :reset_rounds, :forget_pr, :cleanup_review, :run_now),
+        wait_work: rule(:implementing_or_done, :clear_wait, :reset_rounds, :forget_pr, :cleanup_review, :run_now)
       }],
       ["pr_missing", "PR not found", {
         review: rule(:continuing_or_keep, :retry_later),
@@ -162,8 +174,8 @@ module Ghwatch
       }],
       ["checks_failed", "Required checks failed", {
         worker: rule(nil, :run_now, guard: :new),
-        merge: rule("changes_requested", :rework_failed_checks, :reset_review, :run_now, guard: :new_head),
-        wait_work: rule("changes_requested", :clear_wait, :rework_failed_checks, :reset_review, :run_now, guard: :new_head)
+        merge: rule(:rework_or_escalate, :rework_failed_checks, :count_rework, :reset_review, :run_now, guard: :new_head),
+        wait_work: rule(:rework_or_escalate, :clear_wait, :rework_failed_checks, :count_rework, :reset_review, :run_now, guard: :new_head)
       }],
       ["pushed", "Someone pushed to the PR", {
         worker: rule(nil, :run_now),
@@ -172,8 +184,8 @@ module Ghwatch
         wait_work: rule("waiting_for_review", :clear_wait, :run_now)
       }],
       ["reply", "A person replied after the question (PR or issue)", {
-        wait_work: rule(:resume, :clear_wait, :remember_answer, :run_now),
-        wait_final: rule(:resume, :clear_wait, :remember_answer, :run_now)
+        wait_work: rule(:resume, :clear_wait, :reset_rounds, :remember_answer, :run_now),
+        wait_final: rule(:resume, :clear_wait, :reset_rounds, :remember_answer, :run_now)
       }],
       ["activity", "New comment or review by a person", {
         worker: rule(nil, :run_now),
@@ -200,21 +212,24 @@ module Ghwatch
       REACTIONS.find { |name, _description, _rules| name == event }&.last&.fetch(group, nil)
     end
 
-    def initialize(github:, config:, worktrees: nil, issue_triage: nil, log: Log.new)
+    def initialize(github:, config:, worktrees: nil, issue_triage: nil, human_channel: nil, log: Log.new)
       @github = github
       @config = config
       @worktrees = worktrees
       @issue_triage = issue_triage
+      @human_channel = human_channel
       @log = log
     end
 
-    attr_writer :worktrees, :issue_triage
+    attr_writer :worktrees, :issue_triage, :human_channel
 
     # Applies what an action decided. Raises for a result the table does not
     # know, so a new result cannot slip through unhandled.
     def apply_result(task, role, result, context = {})
       table = RESULTS.fetch((role == "deep_reviewer") ? "reviewer" : role)
       rule = table.fetch(result) { raise ArgumentError, "no transition for #{role} result #{result.inspect}" }
+      # Only an unbroken run of `continue` counts.
+      task.metadata.delete("continue_streak") if role == "worker" && result != "continue"
       apply(task, rule, context)
     end
 
@@ -277,6 +292,8 @@ module Ghwatch
       when :continuing_or_keep then "`continuing` (no issue: unchanged)"
       when :review_unless_draft then "`waiting_for_review` (draft: unchanged)"
       when :review_or_continuing then "`waiting_for_review` (no PR: `continuing`)"
+      when :rework_or_escalate then "`changes_requested` (after #{REWORK_LIMIT} rounds: ask a person, resuming `changes_requested`)"
+      when :continuing_or_escalate then "`continuing` (after #{CONTINUE_LIMIT} in a row: ask a person, resuming `continuing`)"
       end
       resume = case rule.resume
       when nil then nil
@@ -302,6 +319,8 @@ module Ghwatch
       previous = task.state
       # Decided before the effects, which may clear what it depends on.
       target = target(task, rule.to, context)
+      return escalate(task, rule.to, previous) if target == :escalate
+
       rule.effects.each { |effect| perform(effect, task, context.merge(resume: resume)) }
       if target && target != task.state
         task.state = target
@@ -320,6 +339,8 @@ module Ghwatch
       when :continuing_or_keep then task.issue_number ? "continuing" : nil
       when :review_unless_draft then context[:draft] ? nil : "waiting_for_review"
       when :review_or_continuing then context[:pull_request] ? "waiting_for_review" : "continuing"
+      when :rework_or_escalate then (task.metadata["rework_rounds"].to_i >= REWORK_LIMIT) ? :escalate : "changes_requested"
+      when :continuing_or_escalate then (task.metadata["continue_streak"].to_i + 1 >= CONTINUE_LIMIT) ? :escalate : "continuing"
       else raise ArgumentError, "unknown target #{to.inspect}"
       end
     end
@@ -357,7 +378,52 @@ module Ghwatch
         task.metadata["rework_reason"] = "Required CI checks failed on #{context[:head]}: #{Array(context[:failed]).join(", ")}. " \
           "Read their logs, fix the cause, test, and push updates to the existing PR."
       when :request_triage then @issue_triage&.request!
+      when :count_rework then task.metadata["rework_rounds"] = task.metadata["rework_rounds"].to_i + 1
+      when :count_continue then task.metadata["continue_streak"] = task.metadata["continue_streak"].to_i + 1
+      when :reset_rounds
+        task.metadata.delete("rework_rounds")
+        task.metadata.delete("continue_streak")
       else raise ArgumentError, "unknown effect #{effect.inspect}"
+      end
+    end
+
+    # Too many rounds without converging: a person decides how to go on. The
+    # counts are reset when they reply, so they get a fresh set of rounds.
+    def escalate(task, to, previous)
+      rework = to == :rework_or_escalate
+      resume = rework ? "changes_requested" : "continuing"
+      if @human_channel
+        @human_channel.wait(task: task, body: escalation_message(task, rework), outcome: Struct.new(:signature).new("ghwatch"),
+          kind: "human-question", target: task.pr_number ? :pull_request : :issue)
+      else
+        @log.warn("[#{task.id}] cannot ask a person: no human channel")
+      end
+      task.metadata["resume_state"] = resume
+      task.retry_at = nil
+      task.state = "waiting_for_human_input"
+      task.metadata["state_since"] = Time.now.to_i
+      @log.info("[#{task.id}] #{previous} -> waiting_for_human_input (#{rework ? "#{REWORK_LIMIT} rework rounds" : "#{CONTINUE_LIMIT} continues"} reached)")
+      task
+    end
+
+    def escalation_message(task, rework)
+      reason = task.metadata["rework_reason"]
+      japanese = @config.respond_to?(:human_language) && @config.human_language.to_s.start_with?("ja")
+      if rework
+        if japanese
+          "このPRはレビューやCIの指摘で #{REWORK_LIMIT} 回ワーカーに差し戻されましたが、まだ収束していません。" \
+            "このまま続けるか、方針を変えるか、PRを閉じるかを判断してください。返信すると、差し戻しの回数を数え直して作業を再開します。" \
+            "#{"\n\n最後の差し戻しの理由: #{reason}" if reason}"
+        else
+          "This PR went back to the worker #{REWORK_LIMIT} times for review changes or failed checks and has not converged. " \
+            "Please decide whether to continue, change the approach, or close the PR. A reply resumes the work with a fresh count." \
+            "#{"\n\nLast reason: #{reason}" if reason}"
+        end
+      elsif japanese
+        "ワーカーが #{CONTINUE_LIMIT} 回続けて「作業継続」を報告し、終わりが見えません。このまま続けるか、方針を示すかを判断してください。返信すると作業を再開します。"
+      else
+        "The worker reported `continue` #{CONTINUE_LIMIT} times in a row without finishing. " \
+          "Please decide whether it should go on or give it direction. A reply resumes the work."
       end
     end
 

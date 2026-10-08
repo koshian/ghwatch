@@ -193,7 +193,7 @@ class PrWorkTest < Minitest::Test
     assert newer.done?
   end
 
-  def test_retry_becoming_due_during_another_pr_runs_before_newer_prs_and_issues
+  def test_the_oldest_ready_task_runs_first_and_a_retry_that_becomes_due_is_chosen_in_order
     now = Time.at(1_000)
     older = Ghwatch::Task.for_pr(164)
     older.state = "changes_requested"
@@ -211,7 +211,8 @@ class PrWorkTest < Minitest::Test
     end
     machine = engine([issue, newer, older, current], github: Github.new([pr(164), pr(174), pr(175)]), worker: action, reviewer: action)
     Time.stub(:now, -> { now }) { machine.run_due }
-    assert_equal [174, 164, 175, :issue], events
+    # Issue #71 is older than every PR; #164's retry became due while #174 ran.
+    assert_equal [:issue, 174, 164, 175], events
     assert older.done?
   end
 
@@ -266,7 +267,8 @@ class PrWorkTest < Minitest::Test
       config: OpenStruct.new(reload_if_changed!: false), github: nil
     )
     Time.stub(:now, -> { now }) { scheduler.cycle }
-    assert_equal [174, 164, :triage, 170, :issue], events
+    # After triage, issue #71 is older than PR #170.
+    assert_equal [174, 164, :triage, :issue, 170], events
   end
 
   def test_conflicts_end_human_waits_but_unknown_mergeability_and_drafts_do_not
@@ -334,8 +336,12 @@ class PrWorkTest < Minitest::Test
     task = Ghwatch::Task.for_pr(164)
     task.retry_at = 0
     calls = 0
-    action = Action.new { |item| calls += 1 }
-    machine = engine([task], github: Github.new([pr(164)]), worker: nil, reviewer: action)
+    github = Github.new([pr(164)])
+    action = Action.new do |item|
+      calls += 1
+      item.last_review_signature = github.review_signature(github.prs[164])
+    end
+    machine = engine([task], github: github, worker: nil, reviewer: action)
     machine.run_due(scope: :pull_requests)
     assert_equal 1, calls
     task.state = "ready_to_merge"

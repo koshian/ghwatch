@@ -18,7 +18,8 @@ module Ghwatch
       @config = config
       @worktrees = worktrees
       @log = log
-      @machine = machine || StateMachine.new(github: github, config: config, worktrees: worktrees, log: log)
+      @machine = machine || StateMachine.new(github: github, config: config, worktrees: worktrees,
+        human_channel: human_channel.respond_to?(:wait) ? human_channel : nil, log: log)
       @observer = observer || Observer.new(github: github, config: config)
     end
 
@@ -39,46 +40,50 @@ module Ghwatch
       active_tasks.reject(&:waiting_for_human?).filter_map(&:retry_at).min
     end
 
+    # Runs agent work one action at a time, choosing again before every
+    # action: the oldest task that can run now goes first, whatever kind of
+    # work it needs, so older work is finished before newer work is touched.
+    # Age is the number of the issue a task came from (the PR's for an
+    # external PR); GitHub numbers issues and PRs in one sequence.
     def run_due(stop_requested: -> { false }, scope: :all)
       raise ArgumentError, "unknown task scope #{scope.inspect}" unless %i[all pull_requests issues].include?(scope)
 
-      run_pull_requests(stop_requested: stop_requested) unless scope == :issues
-      return if scope == :pull_requests
+      actions = Hash.new(0)
+      until stop_requested.call
+        reconcile_all if actions.any? && (@reconciled_at.nil? || Time.now - @reconciled_at >= RECONCILE_INTERVAL)
+        task = active_tasks.select { |candidate| in_scope?(candidate, scope) && actions[candidate.id] < MAX_ACTIONS_PER_TASK && action_due?(candidate) }
+          .min_by { |candidate| [age(candidate), candidate.id] }
+        break unless task
 
-      ran_issue = false
-      active_tasks.reject(&:pr_number).each do |task|
-        break if stop_requested.call
-
-        # Work on PRs, and replies that arrived meanwhile, goes before the
-        # next issue.
-        run_pull_requests(stop_requested: stop_requested, after_other_work: ran_issue) unless scope == :issues
-        break if stop_requested.call
-        next if task.pr_number || task.done?
-
+        actions[task.id] += 1
         run_task_safely(task, stop_requested: stop_requested)
-        ran_issue = true
+      end
+      # A task that used up its actions in this call waits for the next poll
+      # instead of starting over immediately.
+      active_tasks.each do |task|
+        next unless actions[task.id] >= MAX_ACTIONS_PER_TASK && action_due?(task)
+
+        task.schedule_retry(after: @config.retry_after)
+        @state.save_task(task)
       end
     end
 
+    def self.age(task) = task.issue_number || task.pr_number || Float::INFINITY
+
     private
 
-    def run_pull_requests(stop_requested:, after_other_work: false)
-      processed = []
-      until stop_requested.call
-        if (processed.any? || after_other_work) && (@reconciled_at.nil? || Time.now - @reconciled_at >= RECONCILE_INTERVAL)
-          reconcile_all
-        end
-        task = active_tasks.select { |candidate| candidate.pr_number && !processed.include?(candidate.id) && action_due?(candidate) }
-          .min_by(&:pr_number)
-        break unless task
+    def age(task) = self.class.age(task)
 
-        processed << task.id
-        run_task_safely(task, stop_requested: stop_requested)
+    def in_scope?(task, scope)
+      case scope
+      when :pull_requests then !task.pr_number.nil?
+      when :issues then task.pr_number.nil?
+      else true
       end
     end
 
     def run_task_safely(task, stop_requested:)
-      run_task(task, stop_requested: stop_requested)
+      run_task(task)
     rescue => e
       @log.error("task #{task.id} action failed: #{e.class}: #{e.message}")
       task.last_error = e.message
@@ -86,44 +91,31 @@ module Ghwatch
       @state.save_task(task)
     end
 
-    def run_task(task, stop_requested:)
-      limit = task.pr_number ? MAX_ACTIONS_PER_TASK : 1
-      limit.times do
-        return if stop_requested.call || task.done? || !action_due?(task)
+    # One action. What happened since the last look decides first; it may
+    # make the action unnecessary or a different one.
+    def run_task(task)
+      reconcile(task) if task.pr_number || task.review_state? || task.state == "finalizing"
+      return if task.done? || !action_due?(task)
 
-        # What happened since the last look decides first; it may make the
-        # action unnecessary or a different one.
-        reconcile(task) if task.pr_number || task.review_state? || task.state == "finalizing"
-        return if task.done? || !action_due?(task)
-
-        previous_state = task.state
-        # The action's result schedules the next run; start from nothing so
-        # an action that schedules nothing is caught below.
-        task.retry_at = nil
-        case task.state
-        when "implementing", "changes_requested", "continuing"
-          @worker_action.run(task)
-        when "waiting_for_review"
-          @reviewer_action.run(task)
-        when "ready_to_merge"
-          @reviewer_action.attempt_merge(task)
-        when "finalizing"
-          @finalizer_action.run(task)
-        end
-        if task.state == previous_state && task.retry_at.nil?
-          @log.warn("[#{task.id}] #{previous_state} action scheduled nothing; retrying later")
-          task.schedule_retry(after: @config.retry_after)
-        end
-        observe_own_work(task)
-        # A task that asked to run again now (e.g. after updating the PR
-        # branch) continues here, before other work.
-        return if task.state == previous_state && !task.retry_due?
+      previous_state = task.state
+      # The action's result schedules the next run; start from nothing so an
+      # action that schedules nothing is caught below.
+      task.retry_at = nil
+      case task.state
+      when "implementing", "changes_requested", "continuing"
+        @worker_action.run(task)
+      when "waiting_for_review"
+        @reviewer_action.run(task)
+      when "ready_to_merge"
+        @reviewer_action.attempt_merge(task)
+      when "finalizing"
+        @finalizer_action.run(task)
       end
-
-      if limit > 1 && !task.done? && action_due?(task)
+      if task.state == previous_state && task.retry_at.nil?
+        @log.warn("[#{task.id}] #{previous_state} action scheduled nothing; retrying later")
         task.schedule_retry(after: @config.retry_after)
-        @state.save_task(task)
       end
+      observe_own_work(task)
     end
 
     def active_tasks

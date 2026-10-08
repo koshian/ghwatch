@@ -189,7 +189,7 @@ the first one with a rule for the task's group is applied.
 | --- | --- | --- |
 | `waiting_for_review` | `waiting_for_review`; forget the last review; run now; triage again | Human testing is the reviewer's decision; an older `waiting_for_human_test` result is treated alike |
 | `waiting_for_human_input` | `waiting_for_human_input`; resumes the current state; start waiting |  |
-| `continue` | `continuing`; retry after `retry_after` |  |
+| `continue` | `continuing` (after 3 in a row: ask a person, resuming `continuing`); count a `continue`; retry after `retry_after` |  |
 | `done` | `waiting_for_review`; run now | The PR is open |
 | `merged` | `finalizing` (no issue: `done`); run now | `done` reported and the PR is already merged |
 | `deferred` | `done`; remove worktrees; triage again | The issue's assessment becomes `deferred` |
@@ -203,7 +203,7 @@ the first one with a rule for the task's group is applied.
 | --- | --- | --- |
 | `branch_updated` | unchanged; run now | The PR was behind its base and was updated; review the new head |
 | `merge` | `ready_to_merge`; run now | Approved; with `auto_merge` off a person merges |
-| `changes_requested` | `changes_requested`; run now |  |
+| `changes_requested` | `changes_requested` (after 3 rounds: ask a person, resuming `changes_requested`); count a rework round; run now |  |
 | `waiting_for_human_input` | `waiting_for_human_input`; resumes `waiting_for_review`; start waiting |  |
 | `waiting_for_human_test` | `waiting_for_human_test`; resumes `waiting_for_review`; start waiting |  |
 | `comment` | unchanged; retry after `retry_after` | Non-blocking; the same head is not reviewed again until something changes |
@@ -238,15 +238,15 @@ the first one with a rule for the task's group is applied.
 
 | Event | Worker states | `waiting_for_review` | `ready_to_merge` | Wait (work) | Wait (finalizer) | `finalizing` |
 | --- | --- | --- | --- | --- | --- | --- |
-| PR merged | `finalizing` (no issue: `done`); clear the wait; remove the review workspace; run now | `finalizing` (no issue: `done`); clear the wait; remove the review workspace; run now | `finalizing` (no issue: `done`); clear the wait; remove the review workspace; run now | `finalizing` (no issue: `done`); clear the wait; remove the review workspace; run now | — | — |
+| PR merged | `finalizing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; remove the review workspace; run now | `finalizing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; remove the review workspace; run now | `finalizing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; remove the review workspace; run now | `finalizing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; remove the review workspace; run now | — | — |
 | Issue closed by someone (tasks ghwatch started) | `done`; clear the wait; close the PR, delete the branch and worktrees | `done`; clear the wait; close the PR, delete the branch and worktrees | `done`; clear the wait; close the PR, delete the branch and worktrees | `done`; clear the wait; close the PR, delete the branch and worktrees | `done`; clear the wait; remove worktrees | `done`; clear the wait; remove worktrees |
-| PR closed unmerged | `implementing` (no issue: `done`); clear the wait; forget the PR (tasks with an issue); remove the review workspace; run now | `implementing` (no issue: `done`); clear the wait; forget the PR (tasks with an issue); remove the review workspace; run now | `implementing` (no issue: `done`); clear the wait; forget the PR (tasks with an issue); remove the review workspace; run now | `implementing` (no issue: `done`); clear the wait; forget the PR (tasks with an issue); remove the review workspace; run now | — | — |
+| PR closed unmerged | `implementing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; forget the PR (tasks with an issue); remove the review workspace; run now | `implementing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; forget the PR (tasks with an issue); remove the review workspace; run now | `implementing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; forget the PR (tasks with an issue); remove the review workspace; run now | `implementing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; forget the PR (tasks with an issue); remove the review workspace; run now | — | — |
 | PR not found | — | `continuing` (no issue: unchanged); retry after `retry_after` | `continuing` (no issue: unchanged); retry after `retry_after` | `continuing` (no issue: unchanged); clear the wait; retry after `retry_after` | — | `continuing` (no issue: unchanged); retry after `retry_after` |
 | PR found | `waiting_for_review` (draft: unchanged); record the PR; run now | — | — | unchanged; record the PR | — | — |
 | Conflict with the base | unchanged; run now; only when newly observed | `changes_requested`; rework: conflict; forget the last review; run now | `changes_requested`; rework: conflict; forget the last review; run now | `changes_requested`; clear the wait; rework: conflict; forget the last review; run now | — | — |
-| Required checks failed | unchanged; run now; only when newly observed | — | `changes_requested`; rework: failed checks; forget the last review; run now; once per PR head | `changes_requested`; clear the wait; rework: failed checks; forget the last review; run now; once per PR head | — | — |
+| Required checks failed | unchanged; run now; only when newly observed | — | `changes_requested` (after 3 rounds: ask a person, resuming `changes_requested`); rework: failed checks; count a rework round; forget the last review; run now; once per PR head | `changes_requested` (after 3 rounds: ask a person, resuming `changes_requested`); clear the wait; rework: failed checks; count a rework round; forget the last review; run now; once per PR head | — | — |
 | Someone pushed to the PR | unchanged; run now | unchanged; run now | `waiting_for_review`; run now | `waiting_for_review`; clear the wait; run now | — | — |
-| A person replied after the question (PR or issue) | — | — | — | the interrupted state; clear the wait; give the answer to the next runs; run now | the interrupted state; clear the wait; give the answer to the next runs; run now | — |
+| A person replied after the question (PR or issue) | — | — | — | the interrupted state; clear the wait; reset the rework and `continue` counts; give the answer to the next runs; run now | the interrupted state; clear the wait; reset the rework and `continue` counts; give the answer to the next runs; run now | — |
 | New comment or review by a person | unchanged; run now | unchanged; run now | `waiting_for_review`; run now | — | — | — |
 <!-- END GENERATED -->
 
@@ -269,6 +269,34 @@ the first one with a rule for the task's group is applied.
   nothing scheduled is given a retry, and the reviewer skips a head it already reviewed.
   Human waits have no deadline and no reminder.
 - Agent failures try the role's fallback models first (see README), then report `failed`.
+
+## Scheduling
+
+ghwatch runs one agent at a time. Work that needs no agent (looking at GitHub and
+reacting, attempting a merge, syncing labels) is done for every task on every poll. Agent
+work is chosen again before every single action (`TaskEngine#run_due`):
+
+1. Look at every task again if the last look is over a minute old.
+2. Among the tasks that can run now, take the oldest, whatever work it needs (review,
+   rework, implementation, finalizing). Age is the number of the issue the task came from,
+   or the PR's number for an external PR; GitHub numbers both in one sequence.
+3. Run one action for it, then start over.
+
+So older work is finished before newer work is touched, and a reply or push on an older
+task is picked up after the current action instead of after a whole round of others.
+A task runs at most 6 actions in one call; after that it waits for the next poll. Triage,
+which starts new issues, runs on its own schedule between these rounds.
+
+Two limits stop a task that does not converge from taking all the agent time; both ask a
+person instead (on the PR, or the issue without one), and both counts are reset when they
+reply, and when the PR merges or closes:
+
+- Rework rounds: a PR may go back to the worker `REWORK_LIMIT` (3) times for review changes
+  or failed checks. Conflicts do not count; they come from other PRs merging first.
+- `continue`: a worker may report it `CONTINUE_LIMIT` (3) times in a row.
+
+Known limits: what happens while an agent runs (up to its timeout) is looked at only after
+it finishes, and newer work waits while older work is ready.
 
 ## Differences from the current code
 
