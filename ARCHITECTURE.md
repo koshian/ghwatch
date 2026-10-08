@@ -71,8 +71,8 @@ stateDiagram-v2
 
     waiting_for_human_input --> waiting_for_review: reply (resume) / pushed
     waiting_for_human_test --> waiting_for_review: reply (resume) / pushed
-    waiting_for_human_input --> changes_requested: conflict / checks failed
-    waiting_for_human_test --> changes_requested: conflict / checks failed
+    waiting_for_human_input --> changes_requested: checks failed
+    waiting_for_human_test --> changes_requested: checks failed
 
     waiting_for_review --> finalizing: merged
     waiting_for_human_input --> finalizing: merged
@@ -147,7 +147,7 @@ stateDiagram-v2
     merge --> wait_work: merge refused
     wait_work --> review: reply on PR or issue, or a push
     wait_work --> work: worker asked and a reply came
-    wait_work --> changes_requested: conflict or failed checks
+    wait_work --> changes_requested: failed checks
     final --> wait_final: finalizer asks or requests a test
     wait_final --> final: reply on PR or issue
 ```
@@ -243,7 +243,7 @@ the first one with a rule for the task's group is applied.
 | PR closed unmerged | `implementing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; forget the PR (tasks with an issue); remove the review workspace; run now | `implementing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; forget the PR (tasks with an issue); remove the review workspace; run now | `implementing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; forget the PR (tasks with an issue); remove the review workspace; run now | `implementing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; forget the PR (tasks with an issue); remove the review workspace; run now | — | — |
 | PR not found | — | `continuing` (no issue: unchanged); retry after `retry_after` | `continuing` (no issue: unchanged); retry after `retry_after` | `continuing` (no issue: unchanged); clear the wait; retry after `retry_after` | — | `continuing` (no issue: unchanged); retry after `retry_after` |
 | PR found | `waiting_for_review` (draft: unchanged); record the PR; run now | — | — | unchanged; record the PR | — | — |
-| Conflict with the base | unchanged; run now; only when newly observed | `changes_requested`; rework: conflict; forget the last review; run now | `changes_requested`; rework: conflict; forget the last review; run now | `changes_requested`; clear the wait; rework: conflict; forget the last review; run now | — | — |
+| Conflict with the base | unchanged; run now; only when newly observed | `changes_requested`; rework: conflict; forget the last review; run now | `changes_requested`; rework: conflict; forget the last review; run now | — | — | — |
 | Required checks failed | unchanged; run now; only when newly observed | — | `changes_requested` (after 3 rounds: ask a person, resuming `changes_requested`); rework: failed checks; count a rework round; forget the last review; run now; once per PR head | `changes_requested` (after 3 rounds: ask a person, resuming `changes_requested`); clear the wait; rework: failed checks; count a rework round; forget the last review; run now; once per PR head | — | — |
 | Someone pushed to the PR | unchanged; run now | unchanged; run now | `waiting_for_review`; run now | `waiting_for_review`; clear the wait; run now | — | — |
 | A person replied after the question (PR or issue) | — | — | — | the interrupted state; clear the wait; reset the rework and `continue` counts; give the answer to the next runs; run now | the interrupted state; clear the wait; reset the rework and `continue` counts; give the answer to the next runs; run now | — |
@@ -259,10 +259,18 @@ the first one with a rule for the task's group is applied.
 - "Issue closed" applies only to tasks ghwatch started from an issue, never to an external
   PR that merely links one.
 - A push or a comment is reported once: what was seen is recorded after every poll and
-  every action, so the task's own work is not news. "Only when newly observed" applies the
-  same to a conflict or failed checks that are still there.
+  every action, so the task's own work is not news. After an action the last comment seen
+  stays where it was when the agent started: a person's comment posted while it ran is
+  still news. "Only when newly observed" applies the same to a conflict or failed checks
+  that are still there.
 - A reply is any comment without a ghwatch marker posted after the question, on the PR or
-  the issue. No agent of that task runs during the wait, so such comments are a person's.
+  the issue, or posted while the agent that asked was running, since it never saw it. No
+  agent of that task runs during the wait, so such comments are a person's.
+- A conflict does not end a human wait: the question stands until a person answers, and
+  the conflict is resolved when the work resumes. Nothing merges while a task waits, and
+  merging the base does not undo a person's check.
+- Reaching the rework limit asks a person with the reason of this round (the latest
+  review, the conflict or the failed checks), not an older one.
 - `waiting_for_review` also counts a change in the PR's checks as activity, so a review
   that waited for CI runs again when it finishes; the merge step looks at checks itself.
 - Time alone does nothing. Results schedule retries; a `waiting_for_review` task with

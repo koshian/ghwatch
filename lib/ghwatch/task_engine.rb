@@ -144,7 +144,7 @@ module Ghwatch
     def observe_own_work(task)
       return if task.done?
 
-      @observer.record(task, TaskSnapshot.capture(task: task, github: @github))
+      @observer.record(task, TaskSnapshot.capture(task: task, github: @github), own_work: true)
       @state.save_task(task)
     rescue => e
       @log.warn("[#{task.id}] could not record the state after the action: #{e.message}")

@@ -46,7 +46,7 @@ class StateMachineTest < Minitest::Test
     "pr_closed" => {worker: "implementing", review: "implementing", merge: "implementing", wait_work: "implementing"},
     "pr_missing" => {review: "continuing", merge: "continuing", wait_work: "continuing", finalizing: "continuing"},
     "pr_found" => {worker: "waiting_for_review", wait_work: "same"},
-    "conflict" => {worker: "same", review: "changes_requested", merge: "changes_requested", wait_work: "changes_requested"},
+    "conflict" => {worker: "same", review: "changes_requested", merge: "changes_requested"},
     "checks_failed" => {worker: "same", merge: "changes_requested", wait_work: "changes_requested"},
     "pushed" => {worker: "same", review: "same", merge: "waiting_for_review", wait_work: "waiting_for_review"},
     "reply" => {wait_work: "waiting_for_review", wait_final: "finalizing"},
@@ -257,10 +257,24 @@ class StateMachineTest < Minitest::Test
     assert_equal "changes_requested", task.metadata["resume_state"]
     assert_equal :pull_request, channel.asked.last.first
     assert_includes channel.asked.last.last, "3"
+    assert_includes channel.asked.last.last, "Required CI checks failed on h9", "the question gives this round's reason"
 
     @machine.react(task, {"reply" => {question: {}, replies: []}})
     assert_equal "changes_requested", task.state
     refute task.metadata.key?("rework_rounds"), "a reply gives a fresh set of rounds"
+  end
+
+  def test_a_review_that_reaches_the_limit_is_given_as_the_reason_not_an_older_conflict
+    channel = HumanChannel.new
+    @machine.human_channel = channel
+    task = task_in(:review)
+    task.metadata["rework_rounds"] = Ghwatch::StateMachine::REWORK_LIMIT
+    @machine.react(task, {"conflict" => {}})
+    task.state = "waiting_for_review"
+    @machine.apply_result(task, "reviewer", "changes_requested")
+    assert_equal "waiting_for_human_input", task.state
+    assert_includes channel.asked.last.last, "Last reason: the latest review"
+    refute_includes channel.asked.last.last, "conflicts"
   end
 
   def test_three_continues_in_a_row_ask_a_person_and_any_other_result_resets_them

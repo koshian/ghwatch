@@ -31,9 +31,13 @@ module Ghwatch
     end
 
     # Remembers what was just seen; called after reacting and after actions.
-    def record(task, snapshot)
+    # After an action (own_work) the comment id stays where it was when the
+    # agent was given the task: a person's comment posted while it ran was
+    # never read by it, so it is still news.
+    def record(task, snapshot, own_work: false)
       pull_request = snapshot.pull_request
-      observed = {"comment_id" => latest_human_comment_id(snapshot)}
+      latest = own_work ? (task.metadata["observed"] || {})["comment_id"] : latest_human_comment_id(snapshot)
+      observed = {"comment_id" => latest}
       if pull_request
         observed["head"] = pull_request["headRefOid"]
         observed["conflict"] = conflicting?(pull_request)
@@ -92,8 +96,10 @@ module Ghwatch
     end
 
     # A reply is any comment by a person after the question, on the PR or the
-    # issue: no agent of this task runs while it waits. Returns the question
-    # and the replies, which the next agent run is given as the answer.
+    # issue: no agent of this task runs while it waits. A comment posted while
+    # the agent that asked was running counts too, since it never saw it.
+    # Returns the question and the replies, which the next agent run is given
+    # as the answer.
     def reply(task, snapshot)
       return nil unless task.human_marker
 
@@ -101,7 +107,8 @@ module Ghwatch
       question = comments.find { |comment| comment.fetch("body", "").include?(task.human_marker.to_s) }
       return nil unless question
 
-      replies = comments.select { |comment| comment.fetch("id").to_i > question.fetch("id").to_i && human?(comment) }
+      seen = [question.fetch("id").to_i, (task.metadata["observed"] || {})["comment_id"]].compact.min
+      replies = comments.select { |comment| comment.fetch("id").to_i > seen && human?(comment) }
       return nil if replies.empty?
 
       {

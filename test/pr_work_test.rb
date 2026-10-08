@@ -156,7 +156,7 @@ class PrWorkTest < Minitest::Test
     assert_equal [[:update_branch, 172], [:review, 172], [:review, 200]], events
   end
 
-  def test_conflicting_human_test_wait_returns_to_worker_and_finishes_before_newer_prs
+  def test_a_conflict_waits_for_the_reply_and_is_resolved_before_newer_prs
     older = Ghwatch::Task.for_pr(164)
     older.state = "waiting_for_human_test"
     older.human_marker = "marker"
@@ -165,6 +165,7 @@ class PrWorkTest < Minitest::Test
     newer = Ghwatch::Task.for_pr(170)
     newer.retry_at = 0
     github = Github.new([pr(164, mergeable: "CONFLICTING"), pr(170)])
+    github.prs[164]["comments"] = [{"id" => 10, "body" => "Please test <!-- marker -->"}]
     events = []
     worker = Action.new do |task|
       events << [:worker, task.pr_number]
@@ -176,7 +177,7 @@ class PrWorkTest < Minitest::Test
         events << [:merge, task.pr_number]
         task.transition_to("done")
       else
-        events << [:review, task.pr_number]
+        events << [:review, task.pr_number, task.metadata.dig("human_answer", "replies", 0, "body")].compact
         # Like the real reviewer, remember what was approved.
         task.last_review_signature = github.review_signature(github.prs[task.pr_number])
         task.transition_to("ready_to_merge", retry_at: 0)
@@ -184,11 +185,14 @@ class PrWorkTest < Minitest::Test
     end
     machine = engine([newer, older], github: github, worker: worker, reviewer: reviewer)
     machine.reconcile_all
-    assert_equal "changes_requested", older.state
-    assert_nil older.human_marker
-    refute older.metadata.key?("human_conversation_number")
+    assert_equal "waiting_for_human_test", older.state, "the question stands; the conflict is resolved after the reply"
+    assert_equal "marker", older.human_marker
+
+    github.prs[164]["comments"] << {"id" => 11, "body" => "Works for me."}
+    machine.reconcile_all
+    assert_equal "waiting_for_review", older.state
     machine.run_due(scope: :pull_requests)
-    assert_equal [[:worker, 164], [:review, 164], [:merge, 164], [:review, 170], [:merge, 170]], events
+    assert_equal [[:worker, 164], [:review, 164, "Works for me."], [:merge, 164], [:review, 170], [:merge, 170]], events
     assert older.done?
     assert newer.done?
   end
@@ -271,25 +275,40 @@ class PrWorkTest < Minitest::Test
     assert_equal [174, 164, :triage, :issue, 170], events
   end
 
-  def test_conflicts_end_human_waits_but_unknown_mergeability_and_drafts_do_not
-    {"UNKNOWN" => "waiting_for_human_input", "CONFLICTING" => "changes_requested"}.each do |mergeable, expected|
+  def test_a_comment_posted_while_the_agent_ran_answers_the_question_it_then_asked
+    task = Ghwatch::Task.for_pr(164)
+    task.state = "waiting_for_review"
+    task.retry_at = 0
+    github = Github.new([pr(164)])
+    comments = github.prs[164]["comments"] = [{"id" => 10, "body" => "Please look at this."}]
+    reviewer = Action.new do |item|
+      # The reporter writes while the review runs; the review never sees it.
+      comments << {"id" => 11, "body" => "All five worked on Windows 11 and 10."}
+      comments << {"id" => 12, "body" => "Please test again <!-- ghwatch:human-test:q -->"}
+      item.human_marker = "<!-- ghwatch:human-test:q -->"
+      item.transition_to("waiting_for_human_test")
+      item.metadata["resume_state"] = "waiting_for_review"
+    end
+    machine = engine([task], github: github, worker: nil, reviewer: reviewer)
+    machine.reconcile_all
+    machine.run_due(scope: :pull_requests)
+    assert_equal "waiting_for_human_test", task.state
+    assert_equal 10, task.metadata.dig("observed", "comment_id"), "the comment is still news after the action"
+
+    machine.reconcile_all
+    assert_equal "waiting_for_review", task.state
+    assert_equal ["All five worked on Windows 11 and 10."], task.metadata.dig("human_answer", "replies").map { |reply| reply["body"] }
+  end
+
+  def test_conflicts_do_not_end_human_waits
+    %w[UNKNOWN CONFLICTING].each do |mergeable|
       task = Ghwatch::Task.for_pr(164)
       task.state = "waiting_for_human_input"
       task.metadata["resume_state"] = "waiting_for_review"
       machine = engine([task], github: Github.new([pr(164, mergeable: mergeable)]), worker: nil)
       machine.reconcile_all
-      assert_equal expected, task.state
+      assert_equal "waiting_for_human_input", task.state, mergeable
     end
-    task = Ghwatch::Task.for_pr(164)
-    task.state = "waiting_for_human_test"
-    github = Github.new([pr(164, mergeable: "UNKNOWN")])
-    machine = engine([task], github: github, worker: nil)
-    machine.reconcile_all
-    assert_equal "waiting_for_human_test", task.state
-    github.prs[164]["mergeable"] = "CONFLICTING"
-    github.prs[164]["isDraft"] = true
-    machine.reconcile_all
-    assert_equal "waiting_for_human_test", task.state
   end
 
   def test_conflict_repair_failure_retains_retry_delay

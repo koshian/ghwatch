@@ -170,8 +170,7 @@ module Ghwatch
       ["conflict", "Conflict with the base", {
         worker: rule(nil, :run_now, guard: :new),
         review: rule("changes_requested", :rework_conflict, :reset_review, :run_now),
-        merge: rule("changes_requested", :rework_conflict, :reset_review, :run_now),
-        wait_work: rule("changes_requested", :clear_wait, :rework_conflict, :reset_review, :run_now)
+        merge: rule("changes_requested", :rework_conflict, :reset_review, :run_now)
       }],
       ["checks_failed", "Required checks failed", {
         worker: rule(nil, :run_now, guard: :new),
@@ -194,6 +193,9 @@ module Ghwatch
         merge: rule("waiting_for_review", :run_now)
       }]
     ].freeze
+
+    # Effects that say why a PR goes back to the worker.
+    REASON_EFFECTS = %i[rework_review rework_conflict rework_failed_checks].freeze
 
     DOC_BEGIN = "<!-- BEGIN GENERATED: rake docs -->"
     DOC_END = "<!-- END GENERATED -->"
@@ -320,7 +322,11 @@ module Ghwatch
       previous = task.state
       # Decided before the effects, which may clear what it depends on.
       target = target(task, rule.to, context)
-      return escalate(task, rule.to, previous) if target == :escalate
+      if target == :escalate
+        # The question says why the work went back this time.
+        (rule.effects & REASON_EFFECTS).each { |effect| perform(effect, task, context) }
+        return escalate(task, rule.to, previous)
+      end
 
       rule.effects.each { |effect| perform(effect, task, context.merge(resume: resume)) }
       if target && target != task.state
@@ -411,17 +417,17 @@ module Ghwatch
     end
 
     def escalation_message(task, rework)
-      reason = task.metadata["rework_reason"]
       japanese = @config.respond_to?(:human_language) && @config.human_language.to_s.start_with?("ja")
+      reason = task.metadata["rework_reason"] || (japanese ? "直前のレビュー" : "the latest review")
       if rework
         if japanese
           "このPRはレビューやCIの指摘で #{REWORK_LIMIT} 回ワーカーに差し戻されましたが、まだ収束していません。" \
             "このまま続けるか、方針を変えるか、PRを閉じるかを判断してください。返信すると、差し戻しの回数を数え直して作業を再開します。" \
-            "#{"\n\n最後の差し戻しの理由: #{reason}" if reason}"
+            "\n\n最後の差し戻しの理由: #{reason}"
         else
           "This PR went back to the worker #{REWORK_LIMIT} times for review changes or failed checks and has not converged. " \
             "Please decide whether to continue, change the approach, or close the PR. A reply resumes the work with a fresh count." \
-            "#{"\n\nLast reason: #{reason}" if reason}"
+            "\n\nLast reason: #{reason}"
         end
       elsif japanese
         "ワーカーが #{CONTINUE_LIMIT} 回続けて「作業継続」を報告し、終わりが見えません。このまま続けるか、方針を示すかを判断してください。返信すると作業を再開します。"
