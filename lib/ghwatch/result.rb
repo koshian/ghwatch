@@ -93,6 +93,7 @@ module Ghwatch
           "status": "waiting_for_review|waiting_for_human_input|continue|done|deferred",
           "pr": 123,
           "question": "human-facing question, for waiting_for_human_input",
+          "summary": "for the PR: what you changed and why, which review points or failed checks it answers, and what you verified",
           "test_preparation": {
             "commit": "full tested commit SHA",
             "verified": ["checks you performed and their results"],
@@ -108,6 +109,11 @@ module Ghwatch
         finished and another pass of yours is needed, never to prepare testing. Use
         waiting_for_human_input, with a complete question, for information, decisions or
         access you cannot obtain yourself.
+
+        Whenever you pushed to the PR, write summary for the reviewers and maintainers who
+        read the PR: what changed and why, how it answers each review point or failed check of
+        this round, and what you verified. ghwatch posts it on the PR together with the list of
+        new commits, so do not post PR comments yourself.
 
         Human testing is the reviewer's decision: do not start or wait for test builds and do
         not write test requests. Record what you verified in test_preparation and, under

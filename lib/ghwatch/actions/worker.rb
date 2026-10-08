@@ -16,6 +16,7 @@ module Ghwatch
           @state.save_task(task)
         end
         @worktrees&.restore_task_worktree(task)
+        head_before = snapshot.pull_request&.fetch("headRefOid", nil)
         repository_before = RepositoryState.capture(command: @command, cwd: task.worktree || @project.root)
         context = @context_builder.worker(
           task: task,
@@ -37,6 +38,7 @@ module Ghwatch
           decide(task, "worker", "no_change")
         else
           apply_result(task, outcome)
+          post_summary(task, outcome, head_before)
         end
         @state.save_task(task)
       end
@@ -89,6 +91,29 @@ module Ghwatch
         else
           raise "unknown worker status #{data["status"].inspect}"
         end
+      end
+
+      # Every push is explained on the PR: the worker's summary, and the new
+      # commits, which are listed even when the summary is missing.
+      def post_summary(task, outcome, head_before)
+        return unless task.pr_number
+
+        pull_request = @github.pull_request(task.pr_number)
+        head = pull_request&.fetch("headRefOid", nil)
+        summary = outcome.data["summary"].to_s.strip
+        return if head.nil? || (head == head_before && summary.empty?)
+
+        commits = (head == head_before) ? [] : new_commits(task, head_before || "origin/#{pull_request["baseRefName"]}", head)
+        body = [summary.empty? ? nil : summary, commits.empty? ? nil : commits.map { |line| "- #{line}" }.join("\n")]
+        @github.post_pr_comment(task.pr_number, body.compact.join("\n\n"), kind: "worker-summary", model_signature: outcome.signature)
+      rescue => e
+        @log.warn("[#{task.id}] could not post the worker summary: #{e.message}")
+      end
+
+      def new_commits(task, since, head)
+        cwd = task.worktree || @project.root
+        result = @command.run("git", "-C", cwd.to_s, "log", "--format=%h %s", "--max-count=20", "#{since}..#{head}")
+        result.success? ? result.stdout.lines.map(&:strip).reject(&:empty?) : []
       end
 
       def retry_without_pull_request(task)
