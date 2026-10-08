@@ -64,6 +64,7 @@ module Ghwatch
       abandon_pr: "close the PR, delete the branch and worktrees",
       rework_conflict: "rework: conflict",
       rework_failed_checks: "rework: failed checks",
+      rework_review: "rework: the latest review",
       request_triage: "triage again",
       count_rework: "count a rework round",
       count_continue: "count a `continue`",
@@ -85,7 +86,7 @@ module Ghwatch
       "reviewer" => {
         "branch_updated" => rule(nil, :run_now),
         "merge" => rule("ready_to_merge", :run_now),
-        "changes_requested" => rule(:rework_or_escalate, :count_rework, :run_now),
+        "changes_requested" => rule(:rework_or_escalate, :rework_review, :count_rework, :run_now),
         "waiting_for_human_input" => rule("waiting_for_human_input", :start_wait, resume: "waiting_for_review"),
         "waiting_for_human_test" => rule("waiting_for_human_test", :start_wait, resume: "waiting_for_review"),
         "comment" => rule(nil, :retry_later),
@@ -373,6 +374,9 @@ module Ghwatch
       when :abandon_pr then abandon_pull_request(task)
       when :rework_conflict
         task.metadata["rework_reason"] = "Resolve conflicts with the PR base branch, test, and push updates to the existing PR."
+      # The review on the PR says what to change; an older reason (a conflict
+      # long resolved) must not linger.
+      when :rework_review then task.metadata.delete("rework_reason")
       when :rework_failed_checks
         task.metadata["failed_checks_head"] = context[:head]
         task.metadata["rework_reason"] = "Required CI checks failed on #{context[:head]}: #{Array(context[:failed]).join(", ")}. " \

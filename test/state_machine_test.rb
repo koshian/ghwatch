@@ -212,6 +212,15 @@ class StateMachineTest < Minitest::Test
     assert_nil @machine.react(task, {"checks_failed" => {head: "h", failed: ["macOS"]}}), "once per head"
   end
 
+  def test_a_review_replaces_an_older_rework_reason
+    task = task_in(:review)
+    @machine.react(task, {"conflict" => {}})
+    assert_includes task.metadata["rework_reason"], "conflicts"
+    task.state = "waiting_for_review"
+    @machine.apply_result(task, "reviewer", "changes_requested")
+    refute task.metadata.key?("rework_reason")
+  end
+
   def test_a_draft_pr_is_only_recorded
     task = Ghwatch::Task.for_issue(7, branch: "b", worktree: nil)
     @machine.react(task, {"pr_found" => {pr_number: 9, draft: true}})

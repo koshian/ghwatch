@@ -203,7 +203,7 @@ the first one with a rule for the task's group is applied.
 | --- | --- | --- |
 | `branch_updated` | unchanged; run now | The PR was behind its base and was updated; review the new head |
 | `merge` | `ready_to_merge`; run now | Approved; with `auto_merge` off a person merges |
-| `changes_requested` | `changes_requested` (after 3 rounds: ask a person, resuming `changes_requested`); count a rework round; run now |  |
+| `changes_requested` | `changes_requested` (after 3 rounds: ask a person, resuming `changes_requested`); rework: the latest review; count a rework round; run now |  |
 | `waiting_for_human_input` | `waiting_for_human_input`; resumes `waiting_for_review`; start waiting |  |
 | `waiting_for_human_test` | `waiting_for_human_test`; resumes `waiting_for_review`; start waiting |  |
 | `comment` | unchanged; retry after `retry_after` | Non-blocking; the same head is not reviewed again until something changes |
