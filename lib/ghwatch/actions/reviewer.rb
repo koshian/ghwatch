@@ -47,12 +47,13 @@ module Ghwatch
 
       # A person answered a test request. The PR they tested was reviewed
       # already, so it is not reviewed again: the answer decides, as long as
-      # the PR is still the one they tested.
+      # the PR still makes the changes they tested (merging the base in since
+      # does not count).
       def check_test_result(task)
         snapshot = TaskSnapshot.capture(task: task, github: @github)
         pull_request = snapshot.pull_request || raise("PR ##{task.pr_number} is unavailable")
-        unless pull_request["headRefOid"] && pull_request["headRefOid"] == task.metadata["human_test_head"]
-          @log.info("[#{task.id}] PR ##{task.pr_number} is not the head that was tested; reviewing it again")
+        unless tested_changes?(task, pull_request)
+          @log.info("[#{task.id}] PR ##{task.pr_number} changed since it was tested; reviewing it again")
           decide(task, "test_judge", "pr_changed")
           @state.save_task(task)
           return
@@ -194,6 +195,18 @@ module Ghwatch
           raise "unknown review status #{data["status"].inspect}"
         end
         decide(task, role, data["status"])
+      end
+
+      def tested_changes?(task, pull_request)
+        tested = task.metadata["human_test_head"]
+        head = pull_request["headRefOid"]
+        return false unless tested && head
+        return true if tested == head
+
+        @worktrees.same_changes?(task, base: pull_request["baseRefName"], from: tested, to: head)
+      rescue => e
+        @log.warn("[#{task.id}] could not compare the PR with the tested head: #{e.message}")
+        false
       end
 
       def apply_test_result(task, pull_request, outcome)

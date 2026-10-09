@@ -243,6 +243,28 @@ class PrWorktreeTest < Minitest::Test
     refute @manager.behind_base?(@task, @pr)
   end
 
+  def test_merging_the_base_in_keeps_the_pr_changes_and_other_commits_do_not
+    git("push", "origin", "master")
+    @root.join("tools.txt").write("newer test tools\n")
+    git("add", "tools.txt")
+    git("commit", "-m", "Add tools")
+    git("push", "origin", "master")
+    # "Update branch": the base merged into the PR head.
+    git("switch", "--detach", @head)
+    git("merge", "--no-edit", "master")
+    updated = git("rev-parse", "HEAD").strip
+    git("push", "-f", "origin", "HEAD:refs/pull/164/head")
+    assert @manager.same_changes?(@task, base: "master", from: @head, to: updated)
+
+    @root.join("file.txt").write("PR, changed again\n")
+    git("commit", "-am", "Change the PR")
+    changed = git("rev-parse", "HEAD").strip
+    git("push", "-f", "origin", "HEAD:refs/pull/164/head")
+    git("switch", "master")
+    refute @manager.same_changes?(@task, base: "master", from: @head, to: changed)
+    refute @manager.same_changes?(@task, base: "master", from: "0" * 40, to: changed), "an unknown head is a change"
+  end
+
   def test_review_workspace_rejects_a_stale_snapshot
     @pr["headRefOid"] = "stale-head"
     assert_raises(RuntimeError) { @manager.prepare_review(@task, @pr, state: @state) }

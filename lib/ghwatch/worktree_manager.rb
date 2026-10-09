@@ -161,6 +161,20 @@ module Ghwatch
       result.exit_code == 1
     end
 
+    # True when two heads of a PR make the same change to its base, as after
+    # "Update branch" merged the base in. Compared by the patch id of each
+    # head's diff from its fork point, so a base change next to the PR's own
+    # lines, or any other edit, counts as a change; so does a head Git lacks.
+    def same_changes?(task, base:, from:, to:)
+      return true if from == to
+      return false unless base && from && to
+
+      git("fetch", "origin", base)
+      git("fetch", "origin", "refs/pull/#{task.pr_number}/head")
+      ids = [from, to].map { |head| change_id(base, head) }
+      !ids.first.nil? && ids.first == ids.last
+    end
+
     # Frees disk while a person is expected to respond. The review workspace is
     # recreated by the next review; the task worktree keeps its source and commits.
     def release_for_human_wait(task)
@@ -286,8 +300,19 @@ module Ghwatch
       result.stdout
     end
 
-    def git_result(*args)
-      @command.run("git", *args, chdir: @project.root, timeout: 300)
+    def git_result(*args, stdin: nil)
+      @command.run("git", *args, chdir: @project.root, timeout: 300, stdin: stdin)
+    end
+
+    def change_id(base, head)
+      fork_point = git_result("merge-base", "refs/remotes/origin/#{base}", head)
+      return nil unless fork_point.success?
+
+      diff = git("diff", "--no-color", "--no-ext-diff", fork_point.stdout.strip, head)
+      result = git_result("patch-id", "--stable", stdin: diff)
+      raise "git patch-id failed: #{result.text.strip}" unless result.success?
+
+      result.stdout.split.first.to_s
     end
   end
 end

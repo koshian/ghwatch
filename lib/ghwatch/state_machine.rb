@@ -41,7 +41,8 @@ module Ghwatch
     # resume: for a human wait, the state to return to (:current = the state
     # the task is in when it starts waiting).
     # guard: :new applies only when the condition is newly observed;
-    # :new_head applies once per PR head.
+    # :new_head applies once per PR head; :changes_pr applies unless the push
+    # only merged the base in, which leaves what a person checked unchanged.
     Rule = Data.define(:to, :effects, :resume, :guard) do
       def initialize(to: nil, effects: [], resume: nil, guard: nil) = super
     end
@@ -198,9 +199,9 @@ module Ghwatch
       ["pushed", "Someone pushed to the PR", {
         worker: rule(nil, :run_now),
         review: rule(nil, :run_now),
-        checking: rule("waiting_for_review", :run_now),
+        checking: rule("waiting_for_review", :run_now, guard: :changes_pr),
         merge: rule("waiting_for_review", :run_now),
-        wait_work: rule("waiting_for_review", :clear_wait, :run_now)
+        wait_work: rule("waiting_for_review", :clear_wait, :run_now, guard: :changes_pr)
       }],
       ["reply", "A person replied after the question (PR or issue)", {
         wait_work: rule(:resume, :clear_wait, :reset_rounds, :remember_answer, :run_now),
@@ -323,7 +324,8 @@ module Ghwatch
       when :current then "resumes the current state"
       else "resumes `#{rule.resume}`"
       end
-      guard = {new: "only when newly observed", new_head: "once per PR head"}[rule.guard]
+      guard = {new: "only when newly observed", new_head: "once per PR head",
+               changes_pr: "unless only the base was merged in"}[rule.guard]
       [target, resume, *rule.effects.map { |effect| EFFECTS.fetch(effect) }, guard].compact.join("; ")
     end
 
@@ -333,8 +335,18 @@ module Ghwatch
       case guard
       when :new then context.fetch(:new, true)
       when :new_head then task.metadata["failed_checks_head"] != context[:head]
+      when :changes_pr then !same_changes?(task, context)
       else true
       end
+    end
+
+    def same_changes?(task, context)
+      return false unless @worktrees
+
+      @worktrees.same_changes?(task, base: context[:base], from: context[:from], to: context[:head])
+    rescue => e
+      @log.warn("[#{task.id}] could not compare the PR's changes; taking the push as a change: #{e.message}")
+      false
     end
 
     def apply(task, rule, context)

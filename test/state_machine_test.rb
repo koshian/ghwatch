@@ -20,8 +20,18 @@ class StateMachineTest < Minitest::Test
 
   class Worktrees
     attr_reader :calls
+    attr_accessor :base_only
 
-    def initialize = @calls = []
+    def initialize
+      @calls = []
+      @base_only = false
+    end
+
+    # A push that only merged the base in keeps the PR's changes.
+    def same_changes?(task, base:, from:, to:)
+      @calls << [:compare, base, from, to]
+      base_only
+    end
 
     def cleanup(task) = @calls << :cleanup
 
@@ -108,7 +118,7 @@ class StateMachineTest < Minitest::Test
 
   def context(event)
     {"pr_found" => {pr_number: 9, draft: false}, "checks_failed" => {head: "h", failed: ["macOS"], new: true},
-     "conflict" => {new: true}, "pushed" => {head: "h2"}}.fetch(event, {})
+     "conflict" => {new: true}, "pushed" => {head: "h2", from: "h", base: "main"}}.fetch(event, {})
   end
 
   def test_every_reaction_matches_the_specification
@@ -127,6 +137,22 @@ class StateMachineTest < Minitest::Test
         end
       end
     end
+  end
+
+  def test_merging_the_base_in_does_not_end_a_wait_or_the_check_of_a_test_result
+    @worktrees.base_only = true
+    %i[wait_work checking].each do |group|
+      task = task_in(group)
+      assert_nil @machine.react(task, {"pushed" => context("pushed")}), group
+      assert_equal STATES.fetch(group), task.state
+      assert_equal "marker", task.human_marker if group == :wait_work
+    end
+    assert_includes @worktrees.calls, [:compare, "main", "h", "h2"]
+
+    # Elsewhere a push is news either way.
+    task = task_in(:merge)
+    assert_equal "pushed", @machine.react(task, {"pushed" => context("pushed")})
+    assert_equal "waiting_for_review", task.state
   end
 
   def test_the_tables_have_no_rules_the_specification_lacks

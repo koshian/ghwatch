@@ -63,7 +63,9 @@ module Ghwatch
         events["checks_failed"] = {head: pull_request["headRefOid"], failed: failed, new: observed["failed"] != failed}
       end
       head = pull_request["headRefOid"]
-      events["pushed"] = {head: head} if observed["head"] && head && observed["head"] != head
+      if observed["head"] && head && observed["head"] != head
+        events["pushed"] = {head: head, from: observed["head"], base: pull_request["baseRefName"]}
+      end
     end
 
     def conflicting?(pull_request)

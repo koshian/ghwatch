@@ -72,11 +72,11 @@ stateDiagram-v2
 
     waiting_for_human_input --> waiting_for_review: reply (resume) / pushed
     waiting_for_human_test --> checking_test_result: reply (asked by reviewer)
-    waiting_for_human_test --> waiting_for_review: pushed
+    waiting_for_human_test --> waiting_for_review: PR changes pushed
     checking_test_result --> ready_to_merge: test passed
     checking_test_result --> changes_requested: problem reported / conflict
     checking_test_result --> waiting_for_human_test: answer incomplete
-    checking_test_result --> waiting_for_review: not the tested head / pushed
+    checking_test_result --> waiting_for_review: PR changed since the test
     waiting_for_human_input --> changes_requested: checks failed
     waiting_for_human_test --> changes_requested: checks failed
 
@@ -268,7 +268,7 @@ the first one with a rule for the task's group is applied.
 | PR found | `waiting_for_review` (draft: unchanged); record the PR; run now | — | — | — | unchanged; record the PR | — | — |
 | Conflict with the base | unchanged; run now; only when newly observed | `changes_requested`; rework: conflict; forget the last review; run now | `changes_requested`; rework: conflict; forget the last review; run now | `changes_requested`; rework: conflict; forget the last review; run now | — | — | — |
 | Required checks failed | unchanged; run now; only when newly observed | — | — | `changes_requested` (after 3 rounds: ask a person, resuming `changes_requested`); rework: failed checks; count a rework round; forget the last review; run now; once per PR head | `changes_requested` (after 3 rounds: ask a person, resuming `changes_requested`); clear the wait; rework: failed checks; count a rework round; forget the last review; run now; once per PR head | — | — |
-| Someone pushed to the PR | unchanged; run now | unchanged; run now | `waiting_for_review`; run now | `waiting_for_review`; run now | `waiting_for_review`; clear the wait; run now | — | — |
+| Someone pushed to the PR | unchanged; run now | unchanged; run now | `waiting_for_review`; run now; unless only the base was merged in | `waiting_for_review`; run now | `waiting_for_review`; clear the wait; run now; unless only the base was merged in | — | — |
 | A person replied after the question (PR or issue) | — | — | — | — | the interrupted state; clear the wait; reset the rework and `continue` counts; give the answer to the next runs; run now | the interrupted state; clear the wait; reset the rework and `continue` counts; give the answer to the next runs; run now | — |
 | New comment or review by a person | unchanged; run now | unchanged; run now | — | `waiting_for_review`; run now | — | — | — |
 <!-- END GENERATED -->
@@ -294,9 +294,13 @@ the first one with a rule for the task's group is applied.
   merging the base does not undo a person's check.
 - An answer to the reviewer's test request is judged, not reviewed: the PR the person
   tested was already reviewed, so `checking_test_result` runs only the test judge, which
-  needs no workspace or build, and the PR is not updated from its base first. A head other
-  than the tested one (recorded when the request was made) goes back to review instead.
-  A test the finalizer requested resumes `finalizing` as before.
+  needs no workspace or build, and the PR is not updated from its base first. A PR whose
+  changes differ from the tested head (recorded when the request was made) goes back to
+  review instead. A test the finalizer requested resumes `finalizing` as before.
+- A push that only merged the base in ("Update branch") does not end a wait or the check
+  of a test result: the PR's changes are those a person was asked about. ghwatch compares
+  the patch id of each head's diff from its fork point; any other edit, a base change next
+  to the PR's own lines, or a head it cannot compare counts as a change.
 - Reaching the rework limit asks a person with the reason of this round (the latest
   review, the conflict or the failed checks), not an older one.
 - `waiting_for_review` also counts a change in the PR's checks as activity, so a review

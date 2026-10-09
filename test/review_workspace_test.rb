@@ -247,14 +247,27 @@ class ReviewWorkspaceTest < Minitest::Test
     assert_equal "checking_test_result", @task.metadata["resume_state"]
   end
 
-  def test_a_head_other_than_the_tested_one_is_reviewed_again
+  def test_a_pr_changed_since_the_test_is_reviewed_again
     answered_test
     @github.pull_request_data["headRefOid"] = "pushed-head"
+    worktrees = Minitest::Mock.new
+    worktrees.expect(:same_changes?, false, [@task], base: "main", from: "tested-head", to: "pushed-head")
     roles = Minitest::Mock.new
-    reviewer_with(Minitest::Mock.new, roles).check_test_result(@task)
+    reviewer_with(worktrees, roles).check_test_result(@task)
+    worktrees.verify
     roles.verify
     assert_equal "waiting_for_review", @task.state
     assert @task.retry_due?
+  end
+
+  def test_a_pr_that_only_merged_its_base_since_the_test_is_judged
+    answered_test
+    @github.pull_request_data["headRefOid"] = "updated-head"
+    worktrees = Minitest::Mock.new
+    worktrees.expect(:same_changes?, true, [@task], base: "main", from: "tested-head", to: "updated-head")
+    reviewer_with(worktrees, judge_roles("passed", "Confirmed.")).check_test_result(@task)
+    worktrees.verify
+    assert_equal "ready_to_merge", @task.state
   end
 
   private
@@ -263,6 +276,7 @@ class ReviewWorkspaceTest < Minitest::Test
   def answered_test
     @task.state = "checking_test_result"
     @task.metadata["human_test_head"] = "tested-head"
+    @github.pull_request_data["baseRefName"] = "main"
     @task.metadata["human_answer"] = {"question" => {"where" => "PR #167", "body" => "Please test on Windows"},
                                       "replies" => [{"where" => "PR #167", "author" => "reporter",
                                                      "body" => "Windows 11 and 10: all steps succeeded."}]}
