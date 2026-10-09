@@ -28,6 +28,8 @@ module Ghwatch
         worker_contract
       when "reviewer", "deep_reviewer"
         reviewer_contract(role)
+      when "test_judge"
+        test_judge_contract
       when "finalizer"
         finalizer_contract
       else
@@ -215,6 +217,36 @@ module Ghwatch
         or include the commands to build the test subject, not point at files there.
         When all required checks are verified and the change is acceptable,
         return merge rather than asking for redundant human testing.
+      TEXT
+    end
+
+    def test_judge_contract
+      <<~TEXT
+        Do not edit source, build, commit, push, merge or post on GitHub. Return the decision
+        to ghwatch.
+
+        Finish with exactly one result:
+
+        #{START_MARKER}
+        {
+          "status": "passed|problem|incomplete|retry",
+          "body": "for the PR: what was asked, what the person reported, and the decision",
+          "reporter_message": "for incomplete with a related issue: the follow-up request to the person",
+          "reason": "short internal reason"
+        }
+        #{END_MARKER}
+
+        passed means everything the request asked was confirmed by the person asked, even
+        briefly, or a maintainer accepted the change; the PR then merges once its required
+        checks pass. problem means the answer shows the issue's problem still happens; body
+        then tells the worker what was reported, with the steps and environment. incomplete
+        means part of the request is unanswered or the answer is unclear; reporter_message
+        then asks for that part only and repeats nothing that was answered. A different
+        problem outside the issue is not a problem here: mention it in body for the
+        maintainers. Use retry only when the answer cannot be read now, for example an
+        attachment that fails to download.
+
+        #{REPORTER_GUIDANCE}
       TEXT
     end
 

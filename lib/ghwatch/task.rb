@@ -5,7 +5,7 @@ require "json"
 module Ghwatch
   class Task
     WORKER_STATES = %w[implementing changes_requested continuing].freeze
-    REVIEW_STATES = %w[waiting_for_review ready_to_merge].freeze
+    REVIEW_STATES = %w[waiting_for_review checking_test_result ready_to_merge].freeze
     HUMAN_STATES = %w[waiting_for_human_input waiting_for_human_test].freeze
     TERMINAL_STATES = %w[done].freeze
 

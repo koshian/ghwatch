@@ -134,6 +134,26 @@ module Ghwatch
       TEXT
     end
 
+    def test_judge(task:, issue:, pull_request:)
+      <<~TEXT
+        A reviewer reviewed this pull request at commit #{task.metadata["human_test_head"]} and asked a person to test
+        it. The PR is still at that commit, so the review stands: judge only the person's answer.
+        Do not review the code, build or run anything, or ask for checks the request did not
+        contain. Read the related issue and PR conversation for anything posted after the answer.
+        #{human_answer(task)}
+        In the guidance above, "merge" is passed and "changes_requested" is problem here.
+
+        Related issue: #{task.issue_number || "none"}
+        Pull request: #{task.pr_number}
+
+        Issue snapshot:
+        #{JSON.pretty_generate(compact_issue(issue))}
+
+        Pull request snapshot:
+        #{JSON.pretty_generate(compact_pull_request(pull_request))}
+      TEXT
+    end
+
     def finalizer(task:, issue:, pull_request:)
       <<~TEXT
         The implementation phase is over or the pull request has merged. Verify whether the

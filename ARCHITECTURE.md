@@ -28,6 +28,7 @@ still missing. When code and document disagree, decide which is wrong and fix on
 | `continuing` | The worker is continuing its work | worker |
 | `changes_requested` | Reworking after review, a conflict or failed checks | worker |
 | `waiting_for_review` | Waiting for review | reviewer (and deep reviewer) |
+| `checking_test_result` | A person answered the reviewer's test request | test judge |
 | `ready_to_merge` | Approved; waiting for checks and the merge | merge step |
 | `waiting_for_human_input` | Waiting for a person's reply | nothing |
 | `waiting_for_human_test` | Waiting for a person's test result | nothing |
@@ -70,11 +71,17 @@ stateDiagram-v2
     ready_to_merge --> waiting_for_human_input: merge refused
 
     waiting_for_human_input --> waiting_for_review: reply (resume) / pushed
-    waiting_for_human_test --> waiting_for_review: reply (resume) / pushed
+    waiting_for_human_test --> checking_test_result: reply (asked by reviewer)
+    waiting_for_human_test --> waiting_for_review: pushed
+    checking_test_result --> ready_to_merge: test passed
+    checking_test_result --> changes_requested: problem reported / conflict
+    checking_test_result --> waiting_for_human_test: answer incomplete
+    checking_test_result --> waiting_for_review: not the tested head / pushed
     waiting_for_human_input --> changes_requested: checks failed
     waiting_for_human_test --> changes_requested: checks failed
 
     waiting_for_review --> finalizing: merged
+    checking_test_result --> finalizing: merged
     waiting_for_human_input --> finalizing: merged
     waiting_for_human_test --> finalizing: merged
 
@@ -90,6 +97,7 @@ stateDiagram-v2
 
     implementing --> done: issue closed (PR closed, branch deleted)
     waiting_for_review --> done: issue closed
+    checking_test_result --> done: issue closed
     ready_to_merge --> done: issue closed
     waiting_for_human_input --> done: issue closed
     finalizing --> done: issue closed
@@ -131,6 +139,7 @@ stateDiagram-v2
     state "Worker states" as work
     state "waiting_for_review" as review
     state "ready_to_merge" as merge
+    state "checking_test_result" as checking
     state "finalizing" as final
     state "Wait from work" as wait_work {
         direction TB
@@ -146,6 +155,9 @@ stateDiagram-v2
     review --> wait_work: reviewer asks or requests a test
     merge --> wait_work: merge refused
     wait_work --> review: reply on PR or issue, or a push
+    wait_work --> checking: reply to the reviewer's test request
+    checking --> merge: test passed
+    checking --> wait_work: answer incomplete
     wait_work --> work: worker asked and a reply came
     wait_work --> changes_requested: failed checks
     final --> wait_final: finalizer asks or requests a test
@@ -158,7 +170,7 @@ Events that apply to whole groups of states. Each box stands for the states list
 
 ```mermaid
 stateDiagram-v2
-    state "PR open<br/>(worker states, waiting_for_review,<br/>ready_to_merge, wait from work)" as open
+    state "PR open<br/>(worker states, waiting_for_review, checking_test_result,<br/>ready_to_merge, wait from work)" as open
     state "After merge<br/>(finalizing, wait from the finalizer)" as after
     open --> after: PR merged
     open --> implementing: PR closed unmerged (no issue - done)
@@ -205,11 +217,22 @@ the first one with a rule for the task's group is applied.
 | `merge` | `ready_to_merge`; run now | Approved; with `auto_merge` off a person merges |
 | `changes_requested` | `changes_requested` (after 3 rounds: ask a person, resuming `changes_requested`); rework: the latest review; count a rework round; run now |  |
 | `waiting_for_human_input` | `waiting_for_human_input`; resumes `waiting_for_review`; start waiting |  |
-| `waiting_for_human_test` | `waiting_for_human_test`; resumes `waiting_for_review`; start waiting |  |
+| `waiting_for_human_test` | `waiting_for_human_test`; resumes `checking_test_result`; start waiting |  |
 | `comment` | unchanged; retry after `retry_after` | Non-blocking; the same head is not reviewed again until something changes |
 | `retry` | unchanged; retry after `retry_after` |  |
 | `already_reviewed` | unchanged; retry after `retry_after` | Nothing changed since the last review of this head |
 | `pr_changed` | unchanged; retry after `retry_after` | The PR changed during the review |
+| `failed` | unchanged; retry after `retry_after` |  |
+
+**test_judge**
+
+| Result | Next state and effects | Notes |
+| --- | --- | --- |
+| `passed` | `ready_to_merge`; run now | Everything asked was confirmed, or a maintainer accepted it |
+| `problem` | `changes_requested` (after 3 rounds: ask a person, resuming `changes_requested`); rework: the latest review; count a rework round; run now | The answer reports that the problem remains |
+| `incomplete` | `waiting_for_human_test`; resumes `checking_test_result`; start waiting | Part of the request is unanswered; ask for that part only |
+| `pr_changed` | `waiting_for_review`; run now | The head is not the one the person tested; ghwatch checks this before the judge runs |
+| `retry` | unchanged; retry after `retry_after` |  |
 | `failed` | unchanged; retry after `retry_after` |  |
 
 **merge**
@@ -236,18 +259,18 @@ the first one with a rule for the task's group is applied.
 
 ### Reactions
 
-| Event | Worker states | `waiting_for_review` | `ready_to_merge` | Wait (work) | Wait (finalizer) | `finalizing` |
-| --- | --- | --- | --- | --- | --- | --- |
-| PR merged | `finalizing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; remove the review workspace; run now | `finalizing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; remove the review workspace; run now | `finalizing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; remove the review workspace; run now | `finalizing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; remove the review workspace; run now | — | — |
-| Issue closed by someone (tasks ghwatch started) | `done`; clear the wait; close the PR, delete the branch and worktrees | `done`; clear the wait; close the PR, delete the branch and worktrees | `done`; clear the wait; close the PR, delete the branch and worktrees | `done`; clear the wait; close the PR, delete the branch and worktrees | `done`; clear the wait; remove worktrees | `done`; clear the wait; remove worktrees |
-| PR closed unmerged | `implementing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; forget the PR (tasks with an issue); remove the review workspace; run now | `implementing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; forget the PR (tasks with an issue); remove the review workspace; run now | `implementing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; forget the PR (tasks with an issue); remove the review workspace; run now | `implementing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; forget the PR (tasks with an issue); remove the review workspace; run now | — | — |
-| PR not found | — | `continuing` (no issue: unchanged); retry after `retry_after` | `continuing` (no issue: unchanged); retry after `retry_after` | `continuing` (no issue: unchanged); clear the wait; retry after `retry_after` | — | `continuing` (no issue: unchanged); retry after `retry_after` |
-| PR found | `waiting_for_review` (draft: unchanged); record the PR; run now | — | — | unchanged; record the PR | — | — |
-| Conflict with the base | unchanged; run now; only when newly observed | `changes_requested`; rework: conflict; forget the last review; run now | `changes_requested`; rework: conflict; forget the last review; run now | — | — | — |
-| Required checks failed | unchanged; run now; only when newly observed | — | `changes_requested` (after 3 rounds: ask a person, resuming `changes_requested`); rework: failed checks; count a rework round; forget the last review; run now; once per PR head | `changes_requested` (after 3 rounds: ask a person, resuming `changes_requested`); clear the wait; rework: failed checks; count a rework round; forget the last review; run now; once per PR head | — | — |
-| Someone pushed to the PR | unchanged; run now | unchanged; run now | `waiting_for_review`; run now | `waiting_for_review`; clear the wait; run now | — | — |
-| A person replied after the question (PR or issue) | — | — | — | the interrupted state; clear the wait; reset the rework and `continue` counts; give the answer to the next runs; run now | the interrupted state; clear the wait; reset the rework and `continue` counts; give the answer to the next runs; run now | — |
-| New comment or review by a person | unchanged; run now | unchanged; run now | `waiting_for_review`; run now | — | — | — |
+| Event | Worker states | `waiting_for_review` | `checking_test_result` | `ready_to_merge` | Wait (work) | Wait (finalizer) | `finalizing` |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| PR merged | `finalizing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; remove the review workspace; run now | `finalizing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; remove the review workspace; run now | `finalizing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; remove the review workspace; run now | `finalizing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; remove the review workspace; run now | `finalizing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; remove the review workspace; run now | — | — |
+| Issue closed by someone (tasks ghwatch started) | `done`; clear the wait; close the PR, delete the branch and worktrees | `done`; clear the wait; close the PR, delete the branch and worktrees | `done`; clear the wait; close the PR, delete the branch and worktrees | `done`; clear the wait; close the PR, delete the branch and worktrees | `done`; clear the wait; close the PR, delete the branch and worktrees | `done`; clear the wait; remove worktrees | `done`; clear the wait; remove worktrees |
+| PR closed unmerged | `implementing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; forget the PR (tasks with an issue); remove the review workspace; run now | `implementing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; forget the PR (tasks with an issue); remove the review workspace; run now | `implementing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; forget the PR (tasks with an issue); remove the review workspace; run now | `implementing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; forget the PR (tasks with an issue); remove the review workspace; run now | `implementing` (no issue: `done`); clear the wait; reset the rework and `continue` counts; forget the PR (tasks with an issue); remove the review workspace; run now | — | — |
+| PR not found | — | `continuing` (no issue: unchanged); retry after `retry_after` | `continuing` (no issue: unchanged); retry after `retry_after` | `continuing` (no issue: unchanged); retry after `retry_after` | `continuing` (no issue: unchanged); clear the wait; retry after `retry_after` | — | `continuing` (no issue: unchanged); retry after `retry_after` |
+| PR found | `waiting_for_review` (draft: unchanged); record the PR; run now | — | — | — | unchanged; record the PR | — | — |
+| Conflict with the base | unchanged; run now; only when newly observed | `changes_requested`; rework: conflict; forget the last review; run now | `changes_requested`; rework: conflict; forget the last review; run now | `changes_requested`; rework: conflict; forget the last review; run now | — | — | — |
+| Required checks failed | unchanged; run now; only when newly observed | — | — | `changes_requested` (after 3 rounds: ask a person, resuming `changes_requested`); rework: failed checks; count a rework round; forget the last review; run now; once per PR head | `changes_requested` (after 3 rounds: ask a person, resuming `changes_requested`); clear the wait; rework: failed checks; count a rework round; forget the last review; run now; once per PR head | — | — |
+| Someone pushed to the PR | unchanged; run now | unchanged; run now | `waiting_for_review`; run now | `waiting_for_review`; run now | `waiting_for_review`; clear the wait; run now | — | — |
+| A person replied after the question (PR or issue) | — | — | — | — | the interrupted state; clear the wait; reset the rework and `continue` counts; give the answer to the next runs; run now | the interrupted state; clear the wait; reset the rework and `continue` counts; give the answer to the next runs; run now | — |
+| New comment or review by a person | unchanged; run now | unchanged; run now | — | `waiting_for_review`; run now | — | — | — |
 <!-- END GENERATED -->
 
 ### Notes on reactions
@@ -269,6 +292,11 @@ the first one with a rule for the task's group is applied.
 - A conflict does not end a human wait: the question stands until a person answers, and
   the conflict is resolved when the work resumes. Nothing merges while a task waits, and
   merging the base does not undo a person's check.
+- An answer to the reviewer's test request is judged, not reviewed: the PR the person
+  tested was already reviewed, so `checking_test_result` runs only the test judge, which
+  needs no workspace or build, and the PR is not updated from its base first. A head other
+  than the tested one (recorded when the request was made) goes back to review instead.
+  A test the finalizer requested resumes `finalizing` as before.
 - Reaching the rework limit asks a person with the reason of this round (the latest
   review, the conflict or the failed checks), not an older one.
 - `waiting_for_review` also counts a change in the PR's checks as activity, so a review

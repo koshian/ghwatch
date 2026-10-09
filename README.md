@@ -250,6 +250,10 @@ model = "openai/gpt-6-luna"
 The first worker is preferred. In this example Codex is used only when Claude reports a
 capacity/quota condition. Ordinary command failures do not silently fall through.
 
+`test_judge` reads a person's answer to a reviewer's test request (see below). It needs no
+build or workspace, so a light model will do; without `[roles.test_judge]` it runs on the
+reviewer's models.
+
 The built-in runners currently are:
 
 - `claude`
@@ -335,6 +339,11 @@ verified and remaining checks, access/startup instructions and expected results;
 is required when the request explains why. These are agent instructions, not automatic
 validation of builds or evidence. Existing human waits are not migrated.
 
+An answer to the reviewer's test request is not reviewed again: in `checking_test_result`
+the test judge reads it and the PR goes to the merge step when everything asked was
+confirmed, back to the worker when the problem remains, or the person is asked for what is
+missing. Only a PR whose head is no longer the tested one goes back to review.
+
 This keeps product decisions, reproduction details, and test reports next to the GitHub work
 that motivated them.
 
@@ -350,6 +359,7 @@ waiting_for_review
 waiting_for_re_review
 waiting_for_human_input
 waiting_for_human_test
+checking_test_result
 ready_to_merge
 finalizing
 done

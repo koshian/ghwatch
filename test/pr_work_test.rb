@@ -37,6 +37,27 @@ class PrWorkTest < Minitest::Test
     def attempt_merge(task) = @block.call(task)
   end
 
+  # A reviewer that records which of its actions ran; a passed test result
+  # leads to the merge step, as the real judge's does.
+  class Reviewer
+    attr_reader :calls
+
+    def initialize(github)
+      @github = github
+      @calls = []
+    end
+
+    def run(task) = @calls << :review
+
+    def check_test_result(task)
+      @calls << :check_test_result
+      task.last_review_signature = @github.review_signature(@github.pull_request(task.pr_number))
+      task.transition_to("ready_to_merge", retry_at: Time.now.to_i)
+    end
+
+    def attempt_merge(task) = @calls << :merge
+  end
+
   def pr(number, mergeable: "MERGEABLE")
     {"number" => number, "state" => "OPEN", "mergeable" => mergeable, "headRefOid" => "head-#{number}", "isDraft" => false}
   end
@@ -112,6 +133,26 @@ class PrWorkTest < Minitest::Test
     machine.reconcile_all
     Time.stub(:now, -> { now }) { machine.run_due(scope: :pull_requests) }
     assert_equal [239, 235, 240], reviewed
+  end
+
+  def test_an_answer_to_a_reviewer_test_request_is_judged_instead_of_reviewed_again
+    task = Ghwatch::Task.for_issue(234, branch: "b", worktree: nil)
+    task.pr_number = 253
+    task.state = "waiting_for_review"
+    machine = Ghwatch::StateMachine.new(github: nil, config: OpenStruct.new(retry_after: 60), log: Ghwatch::Log.new(StringIO.new))
+    machine.apply_result(task, "reviewer", "waiting_for_human_test")
+    task.human_marker = "<!-- ghwatch:human-test:q -->"
+    task.metadata["human_conversation_number"] = 234
+    issue_comments = [{"id" => 10, "body" => "Please test <!-- ghwatch:human-test:q -->"},
+      {"id" => 11, "body" => "All steps succeeded on Windows 10 and 11."}]
+    github = Github.new([pr(253)])
+    github.define_singleton_method(:issue) { |number| {"number" => number, "state" => "OPEN", "comments" => issue_comments} }
+    reviewer = Reviewer.new(github)
+    machine = engine([task], github: github, worker: nil, reviewer: reviewer)
+    machine.reconcile_all
+    assert_equal "checking_test_result", task.state
+    machine.run_due(scope: :pull_requests)
+    assert_equal [:check_test_result, :merge], reviewer.calls
   end
 
   def test_a_merged_pr_does_not_restart_finalizing_or_its_human_wait

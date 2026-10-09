@@ -45,6 +45,35 @@ module Ghwatch
         @state.save_task(task)
       end
 
+      # A person answered a test request. The PR they tested was reviewed
+      # already, so it is not reviewed again: the answer decides, as long as
+      # the PR is still the one they tested.
+      def check_test_result(task)
+        snapshot = TaskSnapshot.capture(task: task, github: @github)
+        pull_request = snapshot.pull_request || raise("PR ##{task.pr_number} is unavailable")
+        unless pull_request["headRefOid"] && pull_request["headRefOid"] == task.metadata["human_test_head"]
+          @log.info("[#{task.id}] PR ##{task.pr_number} is not the head that was tested; reviewing it again")
+          decide(task, "test_judge", "pr_changed")
+          @state.save_task(task)
+          return
+        end
+
+        issue = task.issue_number && @github.issue(task.issue_number)
+        context = @context_builder.test_judge(task: task, issue: issue, pull_request: pull_request)
+        # The judge reads and builds nothing; any existing checkout will do.
+        cwd = (task.worktree && File.directory?(task.worktree)) ? task.worktree : @project.root
+        outcome = @roles.run("test_judge", context: context, cwd: cwd, task: task)
+        remember_outcome(task, outcome)
+        unless outcome.success?
+          retry_failed_role(task, outcome, "test_judge")
+          return
+        end
+
+        task.clear_retry
+        apply_test_result(task, pull_request, outcome)
+        @state.save_task(task)
+      end
+
       def attempt_merge(task)
         snapshot = TaskSnapshot.capture(task: task, github: @github)
         pull_request = snapshot.pull_request || raise("PR ##{task.pr_number} is unavailable")
@@ -153,6 +182,7 @@ module Ghwatch
           wait_for_human(task, data.fetch("body"), outcome, kind: "human-question", target: :pull_request)
         when "waiting_for_human_test"
           task.last_review_signature = initial_signature
+          task.metadata["human_test_head"] = pull_request["headRefOid"]
           ask_for_human_test(task, data, outcome)
         when "comment"
           post_review_body(task, data.fetch("body"), outcome, kind: "review-comment")
@@ -164,6 +194,25 @@ module Ghwatch
           raise "unknown review status #{data["status"].inspect}"
         end
         decide(task, role, data["status"])
+      end
+
+      def apply_test_result(task, pull_request, outcome)
+        data = outcome.data
+        case data["status"]
+        when "passed"
+          post_review_body(task, data["body"], outcome, kind: "review-ok")
+          task.last_review_signature = refreshed_review_signature(task, fallback: @github.review_signature(pull_request))
+        when "problem"
+          post_review_body(task, data.fetch("body"), outcome, kind: "changes-requested")
+        when "incomplete"
+          message = data["reporter_message"].to_s.strip.empty? ? data.fetch("body") : data["reporter_message"]
+          wait_for_human(task, message, outcome, kind: "human-test", target: task.issue_number ? :issue : :pull_request)
+        when "retry"
+          nil
+        else
+          raise "unknown test result status #{data["status"].inspect}"
+        end
+        decide(task, "test_judge", data["status"])
       end
 
       # The review stays on the PR; the reporter gets a request written for

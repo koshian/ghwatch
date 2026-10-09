@@ -106,6 +106,8 @@ module Ghwatch
         @worker_action.run(task)
       when "waiting_for_review"
         @reviewer_action.run(task)
+      when "checking_test_result"
+        @reviewer_action.check_test_result(task)
       when "ready_to_merge"
         @reviewer_action.attempt_merge(task)
       when "finalizing"
@@ -128,7 +130,9 @@ module Ghwatch
       release_for_human_wait(task) if task.waiting_for_human?
       # A review wait with nothing scheduled would never be looked at again;
       # the reviewer itself skips a head it has already reviewed.
-      task.schedule_retry(after: @config.retry_after) if task.state == "waiting_for_review" && task.retry_at.nil?
+      if %w[waiting_for_review checking_test_result].include?(task.state) && task.retry_at.nil?
+        task.schedule_retry(after: @config.retry_after)
+      end
       @observer.record(task, snapshot)
       task.last_issue_signature = snapshot.issue_signature
       task.last_pr_signature = snapshot.pull_request_signature

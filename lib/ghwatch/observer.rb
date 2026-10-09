@@ -90,9 +90,9 @@ module Ghwatch
     end
 
     def needs_pull_request?(task)
-      return true if %w[waiting_for_review ready_to_merge finalizing].include?(task.state)
+      return true if task.review_state? || task.state == "finalizing"
 
-      task.waiting_for_human? && %w[waiting_for_review ready_to_merge].include?(task.metadata["resume_state"])
+      task.waiting_for_human? && Task::REVIEW_STATES.include?(task.metadata["resume_state"])
     end
 
     # A reply is any comment by a person after the question, on the PR or the

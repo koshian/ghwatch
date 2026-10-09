@@ -32,6 +32,7 @@ class StateMachineTest < Minitest::Test
   STATES = {
     worker: "changes_requested",
     review: "waiting_for_review",
+    checking: "checking_test_result",
     merge: "ready_to_merge",
     wait_work: "waiting_for_human_input",
     wait_final: "waiting_for_human_test",
@@ -41,14 +42,18 @@ class StateMachineTest < Minitest::Test
   # Next state for a task with an issue; nil = no reaction. "same" = the
   # state does not change but the rule applies.
   REACTIONS = {
-    "pr_merged" => {worker: "finalizing", review: "finalizing", merge: "finalizing", wait_work: "finalizing"},
-    "issue_closed" => {worker: "done", review: "done", merge: "done", wait_work: "done", wait_final: "done", finalizing: "done"},
-    "pr_closed" => {worker: "implementing", review: "implementing", merge: "implementing", wait_work: "implementing"},
-    "pr_missing" => {review: "continuing", merge: "continuing", wait_work: "continuing", finalizing: "continuing"},
+    "pr_merged" => {worker: "finalizing", review: "finalizing", checking: "finalizing", merge: "finalizing", wait_work: "finalizing"},
+    "issue_closed" => {worker: "done", review: "done", checking: "done", merge: "done", wait_work: "done", wait_final: "done",
+                       finalizing: "done"},
+    "pr_closed" => {worker: "implementing", review: "implementing", checking: "implementing", merge: "implementing",
+                    wait_work: "implementing"},
+    "pr_missing" => {review: "continuing", checking: "continuing", merge: "continuing", wait_work: "continuing",
+                     finalizing: "continuing"},
     "pr_found" => {worker: "waiting_for_review", wait_work: "same"},
-    "conflict" => {worker: "same", review: "changes_requested", merge: "changes_requested"},
+    "conflict" => {worker: "same", review: "changes_requested", checking: "changes_requested", merge: "changes_requested"},
     "checks_failed" => {worker: "same", merge: "changes_requested", wait_work: "changes_requested"},
-    "pushed" => {worker: "same", review: "same", merge: "waiting_for_review", wait_work: "waiting_for_review"},
+    "pushed" => {worker: "same", review: "same", checking: "waiting_for_review", merge: "waiting_for_review",
+                 wait_work: "waiting_for_review"},
     "reply" => {wait_work: "waiting_for_review", wait_final: "finalizing"},
     "activity" => {worker: "same", review: "same", merge: "waiting_for_review"}
   }.freeze
@@ -64,6 +69,10 @@ class StateMachineTest < Minitest::Test
       "waiting_for_human_input" => "waiting_for_human_input", "waiting_for_human_test" => "waiting_for_human_test",
       "comment" => "same", "retry" => "same", "already_reviewed" => "same", "pr_changed" => "same", "failed" => "same"
     },
+    "test_judge" => {
+      "passed" => "ready_to_merge", "problem" => "changes_requested", "incomplete" => "waiting_for_human_test",
+      "pr_changed" => "waiting_for_review", "retry" => "same", "failed" => "same"
+    },
     "merge" => {
       "pr_changed" => "waiting_for_review", "pending" => "same", "manual" => "same",
       "refused" => "waiting_for_human_input", "merged" => "finalizing"
@@ -75,7 +84,8 @@ class StateMachineTest < Minitest::Test
     }
   }.freeze
 
-  RESULT_FROM = {"worker" => "implementing", "reviewer" => "waiting_for_review", "merge" => "ready_to_merge", "finalizer" => "finalizing"}.freeze
+  RESULT_FROM = {"worker" => "implementing", "reviewer" => "waiting_for_review",
+                 "test_judge" => "checking_test_result", "merge" => "ready_to_merge", "finalizer" => "finalizing"}.freeze
 
   def setup
     @github = Github.new

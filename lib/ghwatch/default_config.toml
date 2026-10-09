@@ -99,6 +99,18 @@ fallback_on = ["capacity", "quota"]
 runner = "claude"
 model = "opus"
 
+[roles.test_judge]
+prompt = "test_judge.md"
+
+[[roles.test_judge.models]]
+runner = "opencode"
+model = "openai/gpt-6-luna"
+fallback_on = ["capacity", "quota"]
+
+[[roles.test_judge.models]]
+runner = "claude"
+model = "sonnet"
+
 [roles.finalizer]
 prompt = "finalizer.md"
 

@@ -208,13 +208,86 @@ class ReviewWorkspaceTest < Minitest::Test
     assert_includes log.string, "[pr-167] deep_reviewer -> changes_requested: CI step fails on macOS\n"
   end
 
+  def test_a_passed_test_of_the_reviewed_head_goes_to_merge_without_another_review
+    posts = answered_test
+    roles = judge_roles("passed", "Both Windows versions passed every step.") do |context|
+      assert_includes context, "Windows 11 and 10: all steps succeeded."
+      assert_includes context, "judge only the person's answer"
+    end
+    # No workspace, branch update or review: the worktrees mock expects nothing.
+    reviewer_with(Minitest::Mock.new, roles).check_test_result(@task)
+    roles.verify
+    assert_equal "ready_to_merge", @task.state
+    assert @task.retry_due?
+    assert_equal [[:pr, "review-ok"]], posts
+    assert_equal @github.review_signature(@github.pull_request_data), @task.last_review_signature
+  end
+
+  def test_a_reported_problem_goes_back_to_the_worker
+    posts = answered_test
+    reviewer_with(Minitest::Mock.new, judge_roles("problem", "Quitting from the menu still drops the connection.")).check_test_result(@task)
+    assert_equal "changes_requested", @task.state
+    assert_equal 1, @task.metadata["rework_rounds"]
+    assert_equal [[:pr, "changes-requested"]], posts
+    assert @task.metadata["human_answer"], "the worker is given the report"
+  end
+
+  def test_an_incomplete_answer_asks_for_the_rest_and_comes_back_to_the_judge
+    answered_test
+    asked = []
+    channel = Object.new
+    channel.define_singleton_method(:wait) do |task:, body:, outcome:, kind:, target:|
+      asked << [body, kind, target]
+      task.human_marker = "<!-- ghwatch:human-test:again -->"
+    end
+    roles = judge_roles("incomplete", "", reporter_message: "Please also try step 5.")
+    reviewer_with(Minitest::Mock.new, roles, human_channel: channel).check_test_result(@task)
+    assert_equal [["Please also try step 5.", "human-test", :pull_request]], asked
+    assert_equal "waiting_for_human_test", @task.state
+    assert_equal "checking_test_result", @task.metadata["resume_state"]
+  end
+
+  def test_a_head_other_than_the_tested_one_is_reviewed_again
+    answered_test
+    @github.pull_request_data["headRefOid"] = "pushed-head"
+    roles = Minitest::Mock.new
+    reviewer_with(Minitest::Mock.new, roles).check_test_result(@task)
+    roles.verify
+    assert_equal "waiting_for_review", @task.state
+    assert @task.retry_due?
+  end
+
   private
 
-  def reviewer_with(worktrees, roles)
+  # The reviewer asked for a test of "tested-head" and the person answered.
+  def answered_test
+    @task.state = "checking_test_result"
+    @task.metadata["human_test_head"] = "tested-head"
+    @task.metadata["human_answer"] = {"question" => {"where" => "PR #167", "body" => "Please test on Windows"},
+                                      "replies" => [{"where" => "PR #167", "author" => "reporter",
+                                                     "body" => "Windows 11 and 10: all steps succeeded."}]}
+    posts = []
+    @github.define_singleton_method(:post_pr_comment) { |number, body, kind:, model_signature:| posts << [:pr, kind] }
+    posts
+  end
+
+  def judge_roles(status, body, reporter_message: nil, &check)
+    roles = Minitest::Mock.new
+    outcome = Ghwatch::RoleRunner::Outcome.new(success: true, role: "test_judge", runner: "test", model: "test",
+      data: {"status" => status, "body" => body, "reporter_message" => reporter_message}.compact,
+      error_kind: nil, error: nil, raw_output: "")
+    roles.expect(:run, outcome) do |role, **options|
+      check&.call(options.fetch(:context))
+      role == "test_judge" && options.fetch(:cwd) == "/project"
+    end
+    roles
+  end
+
+  def reviewer_with(worktrees, roles, human_channel: nil)
     Ghwatch::Actions::Reviewer.new(
-      worktrees: worktrees, project: nil, config: @config, state: @state,
+      worktrees: worktrees, project: OpenStruct.new(root: "/project"), config: @config, state: @state,
       github: @github, roles: roles, context_builder: Ghwatch::ContextBuilder.new(config: @config),
-      human_channel: nil, issue_triage: nil, log: Ghwatch::Log.new(StringIO.new)
+      human_channel: human_channel, issue_triage: nil, log: Ghwatch::Log.new(StringIO.new)
     )
   end
 

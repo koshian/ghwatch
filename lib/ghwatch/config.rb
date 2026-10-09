@@ -55,9 +55,14 @@ module Ghwatch
       github.fetch("status_labels", true)
     end
 
+    # Roles a project may leave out; they run on another role's models with
+    # their own prompt.
+    ROLE_FALLBACKS = {"test_judge" => "reviewer"}.freeze
+
     def role(name)
       roles = data.fetch("roles", {})
-      role = roles[name.to_s] || raise(Error, "missing [roles.#{name}] configuration")
+      role = roles[name.to_s] || roles[ROLE_FALLBACKS[name.to_s]]&.except("prompt") ||
+        raise(Error, "missing [roles.#{name}] configuration")
       Role.new(name.to_s, role)
     end
 
