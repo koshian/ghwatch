@@ -46,6 +46,9 @@ module Ghwatch
       # Assessments are stamped with when the run started: a PR merged while
       # the model was thinking may not be in what it saw.
       @started_at = Time.now.to_i
+      # The latest merge is read once per run; the triage object lives as
+      # long as ghwatch does.
+      remove_instance_variable(:@last_merged_at) if defined?(@last_merged_at)
       candidates = candidate_issues
       if candidates.empty?
         mark_complete

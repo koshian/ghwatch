@@ -141,6 +141,20 @@ class TriageScreeningTest < Minitest::Test
     assert_equal [1, 2, 3, 1, 2], client.calls
   end
 
+  def test_one_triage_sees_merges_made_after_its_earlier_runs
+    client = Client.new(1 => ["deferred", 0.95], 2 => ["skip", 0.95], 3 => ["followup", 0.95])
+    roles = Roles.new { |numbers| assessed(numbers) }
+    running = triage(roles, client)
+    running.run
+    @state.backdate(1, 10)
+    running.run
+    assert_equal [1, 2, 3], client.calls
+
+    @github.merged_at = Time.now.to_i - 5
+    running.run
+    assert_equal [1, 2, 3, 1], client.calls
+  end
+
   def test_a_merge_while_triage_was_running_is_not_missed
     client = Client.new(1 => ["deferred", 0.95], 2 => ["deferred", 0.95], 3 => ["deferred", 0.95])
     roles = Roles.new { |numbers| assessed(numbers) }
