@@ -53,4 +53,18 @@ class GithubPrTest < Minitest::Test
     pull_request = fetch("headRepository" => nil, "headRepositoryOwner" => nil)
     assert_nil pull_request["headRepository"]
   end
+
+  def test_latest_merge_is_read_from_recently_updated_prs
+    command = Minitest::Mock.new
+    result = Ghwatch::Command::Result.new(
+      argv: [], stdout: JSON.generate([{"mergedAt" => "2026-10-09T07:51:13Z"}, {"mergedAt" => "2026-10-08T01:00:00Z"}]),
+      stderr: "", exit_code: 0, timed_out: false
+    )
+    command.expect(:run, result) do |*args, **options|
+      args.first(4) == ["gh", "pr", "list", "--state"] && args.each_cons(2).include?(["--search", "sort:updated-desc"])
+    end
+    github = Github.new(project: OpenStruct.new(root: "."), command: command)
+    assert_equal Time.parse("2026-10-09T07:51:13Z").to_i, github.last_merged_at
+    command.verify
+  end
 end

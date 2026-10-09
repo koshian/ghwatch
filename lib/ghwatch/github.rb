@@ -65,8 +65,10 @@ module Ghwatch
     end
 
     # When the most recent merge happened, as epoch seconds (nil if none).
+    # Merging updates a PR, so the latest merge is among the most recently
+    # updated ones; listing by creation would miss a long-open PR merged now.
     def last_merged_at
-      gh_json("pr", "list", "--state", "merged", "--limit", "20", "--json", "mergedAt")
+      gh_json("pr", "list", "--state", "merged", "--search", "sort:updated-desc", "--limit", "20", "--json", "mergedAt")
         .filter_map { |pr| pr["mergedAt"] && Time.parse(pr["mergedAt"]).to_i }.max
     end
 
