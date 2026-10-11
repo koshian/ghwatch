@@ -149,8 +149,14 @@ label, for example `ghwatch:implementing`, `ghwatch:changes-requested`,
 `ghwatch:waiting-for-review`, `ghwatch:ready-to-merge`, `ghwatch:finalizing`, or `ghwatch:done`.
 Human waits use `ghwatch:waiting-for-human-input` and `ghwatch:waiting-for-human-test`.
 Other task states use the same names with underscores replaced by hyphens. `done` means
-the task completed; the Issue may remain open if more work is needed. Triage assessments
-without a task are not labelled.
+the task completed; the Issue may remain open if more work is needed.
+
+Every open Issue carries one of these labels, so none is left without a reason. Without an
+active task it shows the triage assessment (or the task's end, whichever is newer):
+`ghwatch:ready` (starts when a worker is free), `ghwatch:blocked`,
+`ghwatch:needs-discussion`, `ghwatch:deferred`, `ghwatch:followup`, `ghwatch:skip`, or
+`ghwatch:untriaged` when triage has not judged it yet (for example beyond
+`project.candidate_limit`). `ghwatch status` shows the reasons.
 
 Open PRs that ghwatch works on carry a label from the same set: `implementing` (draft),
 `changes-requested` (the worker is reworking it), `waiting-for-review`, `ready-to-merge`,
@@ -500,8 +506,8 @@ doubtful value or outside the project's goals, requests for behavior that could 
 or third parties (hidden data collection, weakened security, malware-like behavior), and
 large architectural changes become `discussion`, never `ready`, until a maintainer has
 decided. ghwatch posts the concern and the decision needed once, labels the issue
-`ghwatch:needs-discussion` (removed when the assessment changes; disabled together with
-`github.status_labels`), and triages it again when the discussion changes. Only comments
+`ghwatch:needs-discussion` (one of the status labels), and triages it again when the
+discussion changes. Only comments
 by the repository's owner, members and collaborators settle a decision: every issue and
 comment given to agents says whether its author is one (`authorIsMaintainer`), so a
 reporter cannot approve their own request. A maintainer's refusal turns it into `skip`.

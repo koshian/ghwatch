@@ -8,7 +8,14 @@ class StatusLabelsTest < Minitest::Test
     attr_reader :calls
     attr_accessor :fail
 
-    def initialize = @calls = []
+    attr_accessor :open
+
+    def initialize
+      @calls = []
+      @open = []
+    end
+
+    def open_issues = @open
 
     def sync_issue_state_label(number, **options)
       raise "permission denied" if fail
@@ -40,6 +47,33 @@ class StatusLabelsTest < Minitest::Test
       task.state = "waiting_for_human_test"
       state.save_task(task)
       assert_equal [7, "ghwatch:waiting-for-human-test"], github.calls.last
+    end
+  end
+
+  def test_every_open_issue_shows_why_it_is_or_is_not_worked_on
+    Dir.mktmpdir do |directory|
+      state = Ghwatch::StateStore.new(File.join(directory, "state.sqlite3"))
+      github = Github.new
+      labels = Ghwatch::StatusLabels.new(state: state, github: github, config: Ghwatch::Config.new({}))
+      state.status_labels = labels
+      github.open = [{"number" => 3, "labels" => []}, {"number" => 4, "labels" => [{"name" => "bug"}, {"name" => "ghwatch:untriaged"}]}]
+      labels.sync_all
+      assert_equal [[3, "ghwatch:untriaged"]], github.calls, "an issue already labelled is not written again"
+
+      state.save_assessment(3, status: "deferred", reason: "waits for #2", comment: nil, signature: "s", at: 100)
+      state.save_assessment(4, status: "discussion", reason: "idea", comment: "q", signature: "s", at: 100)
+      assert_equal [[3, "ghwatch:deferred"], [4, "ghwatch:needs-discussion"]], github.calls.last(2)
+
+      task = Ghwatch::Task.for_issue(3, branch: "issue-3", worktree: nil)
+      task.metadata["state_since"] = 200
+      state.save_task(task)
+      assert_equal [3, "ghwatch:implementing"], github.calls.last
+      task.state = "done"
+      state.save_task(task)
+      assert_equal [3, "ghwatch:done"], github.calls.last, "the assessment before the task is older"
+
+      state.save_assessment(3, status: "followup", reason: "verify", comment: nil, signature: "t", at: 300)
+      assert_equal [3, "ghwatch:followup"], github.calls.last
     end
   end
 

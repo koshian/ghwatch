@@ -73,6 +73,8 @@ module Ghwatch
       else
         @db[:issue_assessments].insert(row)
       end
+
+      @status_labels&.sync_assessment(number)
     end
 
     def setting(key)

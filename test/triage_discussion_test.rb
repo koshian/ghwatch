@@ -50,17 +50,16 @@ class TriageDiscussionTest < Minitest::Test
     triage.send(:save_assessments, outcome, details)
   end
 
-  def test_discussion_asks_once_and_is_labelled_until_a_decision
+  def test_discussion_asks_once_until_a_decision
     discussion = {"issue" => 1, "status" => "discussion", "concern" => "value",
                   "reason" => "loose idea", "comment" => "Should CayenChat have a comic view?"}
     save(discussion)
     save(discussion)
     assert_equal [[1, "triage-question", "Should CayenChat have a comic view?"]], @github.posted
-    assert_equal ["ghwatch:needs-discussion"], @github.labels[1]
     assert_equal "discussion", @state.assessment(1)[:status]
 
     save({"issue" => 1, "status" => "ready", "reason" => "owner accepted it", "comment" => nil})
-    assert_empty @github.labels[1]
+    assert_equal "ready", @state.assessment(1)[:status]
   end
 
   def test_harmful_requests_can_be_skipped_like_spam
@@ -69,7 +68,6 @@ class TriageDiscussionTest < Minitest::Test
     @config.harmful_issues = "skip"
     save(harmful)
     assert_empty @github.posted
-    assert_empty @github.labels[7]
     assert_equal "skip", @state.assessment(7)[:status]
 
     @config.harmful_issues = "discussion"

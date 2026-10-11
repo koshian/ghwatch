@@ -16,6 +16,18 @@ module Ghwatch
       "waiting_for_human_input" => "waiting_for_human_input",
       "waiting_for_human_test" => "waiting_for_human_test"
     }.freeze
+    # An open issue without an active task carries what triage decided, or
+    # that it was not judged yet, so no issue is left without a reason.
+    TRIAGE_LABELS = {
+      "ready" => ["ghwatch:ready", "0e8a16", "ghwatch triage: ready; starts when a worker is free"],
+      "blocked" => ["ghwatch:blocked", "d876e3", "ghwatch triage: needs information or a decision from a person"],
+      "discussion" => ["ghwatch:needs-discussion", "fbca04", "ghwatch: waiting for a maintainer's decision"],
+      "deferred" => ["ghwatch:deferred", "c5def5", "ghwatch triage: waits for another PR, issue or release"],
+      "followup" => ["ghwatch:followup", "c5def5", "ghwatch triage: waits for a person to verify, release or reply"],
+      "skip" => ["ghwatch:skip", "c5def5", "ghwatch triage: declined or needs no work"],
+      nil => ["ghwatch:untriaged", "ededed", "ghwatch has not judged this issue yet"]
+    }.freeze
+    MANAGED = (LABELS.values + TRIAGE_LABELS.values.map(&:first)).uniq.freeze
 
     def initialize(state:, github:, config:, log: Log.new)
       @state = state
@@ -31,30 +43,68 @@ module Ghwatch
 
       @synced.clear
       tasks = @state.tasks
-      tasks.select(&:issue_number).group_by(&:issue_number).each_value { |group| sync_issue(group.last) }
+      open_issues.each { |issue| sync_issue_number(issue["number"], current: issue["labels"]) }
+      tasks.filter_map(&:issue_number).uniq.each { |number| sync_issue_number(number) }
       tasks.select(&:pr_number).reject(&:done?).group_by(&:pr_number).each_value { |group| sync_pull_request(group.last) }
+    end
+
+    def sync_assessment(number)
+      return unless @config.status_labels?
+
+      sync_issue_number(number)
     end
 
     def sync(task)
       return unless @config.status_labels?
 
-      sync_issue(task) if task.issue_number
+      sync_issue_number(task.issue_number) if task.issue_number
       sync_pull_request(task)
     end
 
     private
 
-    def sync_issue(task)
-      active = @state.tasks.reverse.find { |candidate| candidate.issue_number == task.issue_number && !candidate.done? }
-      status = (active || task).state
-      return if @synced[task.issue_number] == status
-
-      @github.sync_issue_state_label(task.issue_number, label: LABELS.fetch(status),
-        managed_labels: LABELS.values, color: color_for(status), description: "ghwatch task state: #{status}")
-      @synced[task.issue_number] = status
+    def open_issues
+      @github.open_issues
     rescue => e
-      @log.warn("[issue-#{task.issue_number}] could not sync status label: #{e.message}")
+      @log.warn("could not list open issues for status labels: #{e.message}")
+      []
     end
+
+    # current: the issue's labels when already known, to skip a write that
+    # would change nothing.
+    def sync_issue_number(number, current: nil)
+      label, color, description = issue_label(number)
+      return if @synced[number] == label
+
+      names = current&.map { |item| item.is_a?(Hash) ? item["name"] : item }
+      unless names && (names & MANAGED) == [label]
+        @github.sync_issue_state_label(number, label: label, managed_labels: MANAGED, color: color, description: description)
+      end
+      @synced[number] = label
+    rescue => e
+      @log.warn("[issue-#{number}] could not sync status label: #{e.message}")
+    end
+
+    # An active task shows its state. Otherwise the newer of the last task's
+    # end and the triage assessment wins: triage judges an issue again after
+    # its task, and a task started from an assessment ends after it.
+    def issue_label(number)
+      tasks = @state.tasks.select { |task| task.issue_number == number }
+      active = tasks.reverse.find { |task| !task.done? }
+      return task_label(active.state) if active
+
+      last = tasks.last
+      assessment = @state.assessment(number)
+      if assessment && (last.nil? || assessment[:updated_at].to_i >= last.metadata["state_since"].to_i)
+        TRIAGE_LABELS.fetch(assessment[:status], TRIAGE_LABELS[nil])
+      elsif last
+        task_label(last.state)
+      else
+        TRIAGE_LABELS[nil]
+      end
+    end
+
+    def task_label(state) = [LABELS.fetch(state), color_for(state), "ghwatch task state: #{state}"]
 
     def sync_pull_request(task)
       previous = @labelled_prs[task.id]
@@ -71,7 +121,7 @@ module Ghwatch
       key = "pr-#{number}"
       return if @synced.key?(key) && @synced[key] == status
 
-      @github.sync_issue_state_label(number, label: status && LABELS.fetch(status), managed_labels: LABELS.values,
+      @github.sync_issue_state_label(number, label: status && LABELS.fetch(status), managed_labels: MANAGED,
         color: color_for(status.to_s), description: "ghwatch task state: #{status}")
       @synced[key] = status
     rescue => e

@@ -2,7 +2,6 @@
 
 module Ghwatch
   class IssueTriage
-    DISCUSSION_LABEL = "ghwatch:needs-discussion"
     QUESTION_STATUSES = %w[blocked discussion].freeze
     def initialize(project:, config:, state:, github:, roles:, worktrees:, context_builder:, log: Log.new, screening: nil)
       @project = project
@@ -125,7 +124,6 @@ module Ghwatch
         reason = (prior && prior[:status] == decision[:status]) ? prior[:reason] : "settled by #{decision[:model]} screening"
         @state.save_assessment(number, status: decision[:status], reason: reason, comment: nil,
           signature: @github.issue_signature(issue), at: assessed_at)
-        sync_discussion_label(number, decision[:status], prior)
         true
       end
     end
@@ -188,21 +186,7 @@ module Ghwatch
           signature: @github.issue_signature(issue),
           at: assessed_at
         )
-        sync_discussion_label(number, status, previous)
       end
-    end
-
-    def sync_discussion_label(number, status, previous)
-      return unless @config.status_labels?
-
-      if status == "discussion"
-        @github.add_issue_label(number, DISCUSSION_LABEL, color: "fbca04",
-          description: "ghwatch: waiting for a maintainer's decision")
-      elsif previous && previous[:status] == "discussion"
-        @github.remove_issue_label(number, DISCUSSION_LABEL)
-      end
-    rescue => e
-      @log.warn("[issue-#{number}] could not sync discussion label: #{e.message}")
     end
 
     def should_post_blocker?(status, comment, previous, reason)
