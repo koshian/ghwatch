@@ -115,7 +115,8 @@ module Ghwatch
     def screen(issues, previous)
       return issues unless @screening.enabled? && !issues.empty?
 
-      settled = @screening.settle(issues, open_pull_requests: @github.open_pull_requests, previous: previous)
+      settled = @screening.settle(issues, open_pull_requests: @github.open_pull_requests, previous: previous,
+        references: ->(number) { @github.reference(number) })
       issues.reject do |issue|
         number = issue["number"]
         decision = settled[number] or next false

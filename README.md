@@ -485,7 +485,10 @@ Triage runs in up to three stages and skips work it has already done:
    `ready` issue starts as soon as a worker slot opens. Issues that are ready start oldest
    (lowest number) first; the model decides which are ready, not the order.
 2. With `[triage.screening]` enabled, a decision model (TypeSafe Jev, `POST /v1/systemone`)
-   judges each changed issue. Only a confident (`min_confidence`, default 0.8) `deferred`,
+   judges each changed issue. It is given the issue, its comments (dated, with the ones
+   posted since the last assessment marked), the open PRs, and the current state of the
+   issues and PRs it mentions as `#N`, so it can tell whether what a `deferred` issue waits
+   for is done. Only a confident (`min_confidence`, default 0.8) `deferred`,
    `followup` or `skip` is settled there; issues it would start or comment on, issues with
    a `blocked` or `discussion` conversation under way, and large issues go on. If the API
    key (`TYPESAFE_API_KEY` by default) is missing or the call fails, everything goes on.

@@ -22,6 +22,8 @@ class TriageScreeningTest < Minitest::Test
     def open_pull_requests = [{"number" => 172, "title" => "Start at login"}]
 
     def last_merged_at = @merged_at
+
+    def reference(number) = {"number" => number, "kind" => "issue", "state" => "open"}
   end
 
   class State
@@ -69,13 +71,14 @@ class TriageScreeningTest < Minitest::Test
   end
 
   class Client
-    attr_reader :calls
+    attr_reader :calls, :states
 
-    def initialize(answers) = (@answers = answers) && (@calls = [])
+    def initialize(answers) = (@answers = answers) && (@calls = []) && (@states = [])
 
     def evaluate(state:, questions:)
       number = state.dig("issue", "number")
       @calls << number
+      @states << state
       raise Ghwatch::Jev::Error, "HTTP 529: overloaded" if @answers[number] == :error
 
       choice, confidence = @answers.fetch(number)
@@ -226,5 +229,45 @@ class TriageScreeningTest < Minitest::Test
     triage(roles, client).run
     assert_equal [2, 3], client.calls
     assert_equal [[1]], roles.calls
+  end
+
+  def test_screening_is_given_the_state_of_what_the_issue_mentions_and_which_comments_are_new
+    states = []
+    client = Object.new
+    client.define_singleton_method(:evaluate) do |state:, questions:|
+      states << state
+      {"model" => "jev-1.13.0", "answers" => {"status" => {"choice" => "ready", "confidence" => 0.9}}}
+    end
+    looked_up = []
+    references = lambda do |number|
+      looked_up << number
+      raise "HTTP 404" if number == 404
+      {"number" => number, "kind" => "issue", "state" => "closed", "closedAs" => "completed"}
+    end
+    assessed_at = Time.parse("2026-10-11T01:00:00Z").to_i
+    first = issue(280, body: "Start after #268 is done and #279 is merged; not #280, https://example.com/#12 or &#38;.")
+    first["comments"] = [
+      {"author_association" => "OWNER", "created_at" => "2026-10-10T00:00:00Z", "body" => "See #404"},
+      {"author_association" => "OWNER", "created_at" => "2026-10-11T01:08:15Z", "body" => "Go ahead"}
+    ]
+    second = issue(281, body: "Needs #268 too")
+    screening = Ghwatch::IssueScreening.new(config: @config, log: Ghwatch::Log.new(@log), client: client)
+    screening.settle([first, second], open_pull_requests: [], references: references,
+      previous: {280 => {status: "deferred", updated_at: assessed_at}})
+
+    assert_equal [268, 279], states.first["referenced"].map { |item| item["number"] }
+    assert_equal "completed", states.first["referenced"].first["closedAs"]
+    assert_equal [false, true], states.first.dig("issue", "comments").map { |comment| comment["new"] }
+    assert_equal "2026-10-11T01:08:15Z", states.first.dig("issue", "comments").last["createdAt"]
+    assert_equal [268], states.last["referenced"].map { |item| item["number"] }
+    assert_equal [268, 279, 404], looked_up, "each mention is looked up once per run"
+    assert_includes @log.string, "could not read the state of #404"
+  end
+
+  def test_triage_looks_up_what_issues_mention_for_screening
+    @github.issues[1] = issue(1, body: "After #5")
+    client = Client.new(1 => ["deferred", 0.95], 2 => ["skip", 0.95], 3 => ["skip", 0.95])
+    triage(Roles.new { |numbers| assessed(numbers) }, client).run
+    assert_equal [{"number" => 5, "kind" => "issue", "state" => "open"}], client.states.first["referenced"]
   end
 end

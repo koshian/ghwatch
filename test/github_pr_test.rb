@@ -67,4 +67,22 @@ class GithubPrTest < Minitest::Test
     assert_equal Time.parse("2026-10-09T07:51:13Z").to_i, github.last_merged_at
     command.verify
   end
+
+  def reference(payload)
+    command = Minitest::Mock.new
+    result = Ghwatch::Command::Result.new(argv: [], stdout: JSON.generate(payload), stderr: "", exit_code: 0, timed_out: false)
+    command.expect(:run, result) { |*args, **options| args == ["gh", "api", "repos/koshian/cayenchat/issues/7"] }
+    Github.new(project: OpenStruct.new(root: "."), command: command).reference(7)
+  end
+
+  def test_a_reference_tells_merged_prs_and_how_an_issue_was_closed
+    assert_equal({"number" => 7, "kind" => "pull_request", "title" => "PR", "state" => "merged"},
+      reference("title" => "PR", "state" => "closed", "pull_request" => {"merged_at" => "2026-10-11T00:53:48Z"}))
+    assert_equal({"number" => 7, "kind" => "pull_request", "title" => "PR", "state" => "closed"},
+      reference("title" => "PR", "state" => "closed", "pull_request" => {"merged_at" => nil}))
+    assert_equal({"number" => 7, "kind" => "issue", "title" => "Issue", "state" => "closed", "closedAs" => "completed"},
+      reference("title" => "Issue", "state" => "closed", "state_reason" => "completed"))
+    assert_equal({"number" => 7, "kind" => "issue", "title" => "Issue", "state" => "open"},
+      reference("title" => "Issue", "state" => "open", "state_reason" => nil))
+  end
 end

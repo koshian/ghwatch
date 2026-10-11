@@ -60,6 +60,15 @@ module Ghwatch
       )
     end
 
+    # The current state of an issue or PR another issue mentions as #N.
+    def reference(number)
+      item = gh_api("repos/#{repo_name}/issues/#{number}")
+      pull = item["pull_request"]
+      state = (pull && pull["merged_at"]) ? "merged" : item["state"]
+      {"number" => number, "kind" => pull ? "pull_request" : "issue", "title" => item["title"], "state" => state,
+       "closedAs" => (!pull && item["state"] == "closed") ? item["state_reason"] : nil}.compact
+    end
+
     def issue_comments(number)
       gh_api_paginated("repos/#{repo_name}/issues/#{number}/comments?per_page=100")
     end
