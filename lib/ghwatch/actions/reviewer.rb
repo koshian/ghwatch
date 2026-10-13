@@ -194,7 +194,17 @@ module Ghwatch
         else
           raise "unknown review status #{data["status"].inspect}"
         end
-        decide(task, role, data["status"])
+        decide(task, role, data["status"], rework_context(data, "review"))
+      end
+
+      # What the worker is sent back for, kept for later rounds and for the
+      # person asked once the rounds run out.
+      def rework_context(data, source)
+        return {} unless %w[changes_requested problem].include?(data["status"])
+
+        rework = data["rework"].is_a?(Hash) ? data["rework"] : {}
+        summary = rework["summary"] || data["reason"] || data["body"].to_s.lines.find { |line| !line.strip.empty? }
+        {rework: rework.slice("main_problem_solved", "simplify").merge("source" => source, "summary" => summary)}
       end
 
       def tested_changes?(task, pull_request)
@@ -225,7 +235,7 @@ module Ghwatch
         else
           raise "unknown test result status #{data["status"].inspect}"
         end
-        decide(task, "test_judge", data["status"])
+        decide(task, "test_judge", data["status"], rework_context(data, "test"))
       end
 
       # The review stays on the PR; the reporter gets a request written for

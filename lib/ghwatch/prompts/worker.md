@@ -20,3 +20,15 @@ them), push, and hand it to review. The reviewer decides whether a person must t
 starts test builds and writes the request; do not start test builds, wait for them, or write
 test requests yourself. If you think something can only be checked by a person, say so in
 your result for the reviewer.
+
+When a review sends the PR back, the context says which rework round this is and why the
+earlier rounds happened. From the second round on, check whether the points cluster on a
+mechanism this PR added to answer earlier review points, each fix exposing the next hole.
+If they do, stop patching it and first weigh, against the risk the points describe:
+
+- narrowing the scope the change covers;
+- removing that mechanism, and stating the remaining effect in the specification or PR as
+  an accepted limitation;
+- switching to a different, simpler approach.
+
+Say in your summary which you chose and why, including when you keep the current approach.

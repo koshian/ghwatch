@@ -13,6 +13,9 @@ module Ghwatch
     # row, before a person is asked how to go on.
     REWORK_LIMIT = 3
     CONTINUE_LIMIT = 3
+    # Each round's reason is kept short; the history only has to show where
+    # the rounds went.
+    REWORK_SUMMARY_LENGTH = 300
 
     # Groups of states that react alike. A human wait belongs to the work it
     # interrupted unless the finalizer asked.
@@ -329,6 +332,25 @@ module Ghwatch
       [target, resume, *rule.effects.map { |effect| EFFECTS.fetch(effect) }, guard].compact.join("; ")
     end
 
+    # One line per round in the order they happened, for agents and people.
+    def self.rework_history_lines(task, japanese: false)
+      sources = japanese ? {"review" => "レビュー", "test" => "テスト結果", "checks" => "CI"} : {}
+      Array(task.metadata["rework_history"]).map do |round|
+        source = sources.fetch(round["source"], round["source"])
+        summary = round["summary"] || (japanese ? "(要約なし)" : "(no summary)")
+        "#{round["round"]}. #{source}: #{summary}"
+      end
+    end
+
+    # The newest reviewer's view of the round: whether the issue's own problem
+    # is solved, and what simpler course it sees.
+    def self.rework_outlook(task)
+      history = Array(task.metadata["rework_history"])
+      solved = history.reverse.find { |round| round.key?("main_problem_solved") }&.fetch("main_problem_solved")
+      simplify = history.filter_map { |round| round["simplify"] }.uniq
+      [solved, simplify]
+    end
+
     private
 
     def guard_holds?(task, guard, context)
@@ -357,6 +379,7 @@ module Ghwatch
       if target == :escalate
         # The question says why the work went back this time.
         (rule.effects & REASON_EFFECTS).each { |effect| perform(effect, task, context) }
+        record_rework(task, context) if rule.effects.include?(:count_rework)
         return escalate(task, rule.to, previous)
       end
 
@@ -420,13 +443,33 @@ module Ghwatch
         task.metadata["rework_reason"] = "Required CI checks failed on #{context[:head]}: #{Array(context[:failed]).join(", ")}. " \
           "Read their logs, fix the cause, test, and push updates to the existing PR."
       when :request_triage then @issue_triage&.request!
-      when :count_rework then task.metadata["rework_rounds"] = task.metadata["rework_rounds"].to_i + 1
+      when :count_rework
+        task.metadata["rework_rounds"] = task.metadata["rework_rounds"].to_i + 1
+        record_rework(task, context)
       when :count_continue then task.metadata["continue_streak"] = task.metadata["continue_streak"].to_i + 1
       when :reset_rounds
         task.metadata.delete("rework_rounds")
+        task.metadata.delete("rework_history")
         task.metadata.delete("continue_streak")
       else raise ArgumentError, "unknown effect #{effect.inspect}"
       end
+    end
+
+    # Why the PR went back this time. Reviewers and the test judge pass their
+    # view as context[:rework]; failed checks are named by the event.
+    def record_rework(task, context)
+      entry = context[:rework] || {}
+      entry = {"source" => "checks", "summary" => "Required CI checks failed: #{Array(context[:failed]).join(", ")}"} if context.key?(:failed)
+      history = Array(task.metadata["rework_history"])
+      summary = entry["summary"].to_s.strip.gsub(/\s+/, " ")
+      summary = "#{summary[0, REWORK_SUMMARY_LENGTH]} …" if summary.length > REWORK_SUMMARY_LENGTH
+      task.metadata["rework_history"] = history + [{
+        "round" => history.size + 1,
+        "source" => entry["source"] || "review",
+        "summary" => summary.empty? ? nil : summary,
+        "main_problem_solved" => [true, false].include?(entry["main_problem_solved"]) ? entry["main_problem_solved"] : nil,
+        "simplify" => entry["simplify"].to_s.strip.empty? ? nil : entry["simplify"].to_s.strip
+      }.compact]
     end
 
     # Too many rounds without converging: a person decides how to go on. The
@@ -452,15 +495,24 @@ module Ghwatch
       japanese = @config.respond_to?(:human_language) && @config.human_language.to_s.start_with?("ja")
       reason = task.metadata["rework_reason"] || (japanese ? "直前のレビュー" : "the latest review")
       if rework
+        history = self.class.rework_history_lines(task, japanese: japanese)
+        solved, simplify = self.class.rework_outlook(task)
         if japanese
-          "このPRはレビューやCIの指摘で #{REWORK_LIMIT} 回ワーカーに差し戻されましたが、まだ収束していません。" \
+          message = "このPRはレビューやCIの指摘で #{REWORK_LIMIT} 回ワーカーに差し戻されましたが、まだ収束していません。" \
             "このまま続けるか、方針を変えるか、PRを閉じるかを判断してください。返信すると、差し戻しの回数を数え直して作業を再開します。" \
             "\n\n最後の差し戻しの理由: #{reason}"
+          message += "\n\n差し戻しの経緯:\n#{history.join("\n")}" unless history.empty?
+          message += "\n\n本題(Issue の問題)は、レビュアーの見立てでは#{solved ? "解決済みです" : "まだ解決していません"}。" unless solved.nil?
+          message += "\n\n単純化の候補:\n#{simplify.map { |idea| "- #{idea}" }.join("\n")}" unless simplify.empty?
         else
-          "This PR went back to the worker #{REWORK_LIMIT} times for review changes or failed checks and has not converged. " \
+          message = "This PR went back to the worker #{REWORK_LIMIT} times for review changes or failed checks and has not converged. " \
             "Please decide whether to continue, change the approach, or close the PR. A reply resumes the work with a fresh count." \
             "\n\nLast reason: #{reason}"
+          message += "\n\nRework rounds:\n#{history.join("\n")}" unless history.empty?
+          message += "\n\nAs the reviewer sees it, the issue's own problem is #{solved ? "solved" : "not solved yet"}." unless solved.nil?
+          message += "\n\nWays to simplify:\n#{simplify.map { |idea| "- #{idea}" }.join("\n")}" unless simplify.empty?
         end
+        message
       elsif japanese
         "ワーカーが #{CONTINUE_LIMIT} 回続けて「作業継続」を報告し、終わりが見えません。このまま続けるか、方針を示すかを判断してください。返信すると作業を再開します。"
       else

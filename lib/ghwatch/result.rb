@@ -168,9 +168,19 @@ module Ghwatch
             "test_subject": "build/run link, artifact name, access and startup instructions, or why no artifact is needed",
             "steps": ["human test steps and expected results"]
           },
+          "rework": {
+            "summary": "for changes_requested: one line on what this round asks to change",
+            "main_problem_solved": true,
+            "simplify": "for changes_requested: a narrower scope, a mechanism to drop, or a simpler approach worth considering, or null"
+          },
           "reason": "short internal reason"
         }
         #{END_MARKER}
+
+        With changes_requested, fill rework: main_problem_solved tells whether the problem
+        the issue describes is solved by the PR as it stands, apart from the points raised.
+        ghwatch keeps one line per round and shows them to the worker, later reviews and the
+        person asked when the rounds run out.
 
         merge means the change is acceptable and all required human verification is already
         satisfied; non-blocking suggestions belong in a merge review's body and are no reason

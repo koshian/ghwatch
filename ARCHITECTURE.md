@@ -302,7 +302,14 @@ the first one with a rule for the task's group is applied.
   the patch id of each head's diff from its fork point; any other edit, a base change next
   to the PR's own lines, or a head it cannot compare counts as a change.
 - Reaching the rework limit asks a person with the reason of this round (the latest
-  review, the conflict or the failed checks), not an older one.
+  review, the conflict or the failed checks), not an older one, followed by one line per
+  round, whether the latest reviewer sees the issue's own problem as solved, and the ways
+  to simplify reviewers suggested.
+- Each counted round records why the PR went back (`rework_history`: the reviewer's or
+  test judge's one-line summary, or the failed checks). The worker and reviewers are given
+  the round number and this history, so from the second round on they can tell when fixes
+  keep circling a mechanism the PR added, and consider narrowing, removing or replacing it
+  instead of patching it again. The history is reset with the rework count.
 - `waiting_for_review` also counts a change in the PR's checks as activity, so a review
   that waited for CI runs again when it finishes; the merge step looks at checks itself.
 - Time alone does nothing. Results schedule retries; a `waiting_for_review` task with

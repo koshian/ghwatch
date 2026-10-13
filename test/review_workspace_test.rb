@@ -208,6 +208,22 @@ class ReviewWorkspaceTest < Minitest::Test
     assert_includes log.string, "[pr-167] deep_reviewer -> changes_requested: CI step fails on macOS\n"
   end
 
+  def test_a_review_that_sends_the_pr_back_records_its_view_of_the_round
+    worktrees = Minitest::Mock.new
+    worktrees.expect(:prepare_review, "/review/pr-167") { |task, pr, **options| true }
+    worktrees.expect(:record_workspace_changes, nil) { |task, **options| true }
+    roles = Minitest::Mock.new
+    outcome = Ghwatch::RoleRunner::Outcome.new(success: true, role: "reviewer", runner: "test", model: "test",
+      data: {"status" => "changes_requested", "body" => "", "reason" => "internal",
+             "rework" => {"summary" => "draft restore races with sending", "main_problem_solved" => true,
+                          "simplify" => "drop the draft restore", "extra" => "ignored"}},
+      error_kind: nil, error: nil, raw_output: "")
+    roles.expect(:run, outcome) { |role, **options| true }
+    reviewer_with(worktrees, roles).run(@task)
+    assert_equal [{"round" => 1, "source" => "review", "summary" => "draft restore races with sending",
+                   "main_problem_solved" => true, "simplify" => "drop the draft restore"}], @task.metadata["rework_history"]
+  end
+
   def test_a_passed_test_of_the_reviewed_head_goes_to_merge_without_another_review
     posts = answered_test
     roles = judge_roles("passed", "Both Windows versions passed every step.") do |context|
@@ -228,6 +244,8 @@ class ReviewWorkspaceTest < Minitest::Test
     reviewer_with(Minitest::Mock.new, judge_roles("problem", "Quitting from the menu still drops the connection.")).check_test_result(@task)
     assert_equal "changes_requested", @task.state
     assert_equal 1, @task.metadata["rework_rounds"]
+    assert_equal [{"round" => 1, "source" => "test", "summary" => "Quitting from the menu still drops the connection."}],
+      @task.metadata["rework_history"]
     assert_equal [[:pr, "changes-requested"]], posts
     assert @task.metadata["human_answer"], "the worker is given the report"
   end

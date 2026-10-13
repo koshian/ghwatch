@@ -40,6 +40,7 @@ module Ghwatch
         Branch: #{task.branch || "none"}
         Local workspace branch: #{task.metadata["local_branch"] || task.branch || "none"}
         Rework requested: #{task.metadata["rework_reason"] || "see PR review discussion"}
+        #{rework_rounds(task)}
         PR head repository: #{task.metadata["pr_head_repository"] || "see current PR"}
 
         Read the repository's AGENTS.md and relevant project/specification files before changing
@@ -116,6 +117,7 @@ module Ghwatch
         Task state: #{task.state}
         Related issue: #{task.issue_number || "none"}
         Pull request: #{task.pr_number}
+        #{rework_rounds(task)}
 
         Whether a person must test this change is your decision. The worker does not prepare
         test builds or test requests: when a person must test, start the test build, wait for
@@ -172,6 +174,18 @@ module Ghwatch
     end
 
     private
+
+    # How many times the PR went back to the worker and why, so the agents
+    # can tell when the rounds circle around one mechanism.
+    def rework_rounds(task)
+      rounds = task.metadata["rework_rounds"].to_i
+      history = StateMachine.rework_history_lines(task)
+      return "" if rounds.zero? && history.empty?
+
+      text = "Rework round: #{rounds} of #{StateMachine::REWORK_LIMIT} (after that a person decides how to go on)"
+      text += "\nEarlier rework rounds, oldest first:\n#{history.join("\n")}" unless history.empty?
+      text
+    end
 
     # GitHub payloads carry many URLs, ids, reactions and diff hunks that agents
     # don't need; keep only what describes the discussion so prompts stay small.
