@@ -495,7 +495,9 @@ Triage runs in up to three stages and skips work it has already done:
    posted since the last assessment marked), the open PRs, and the current state of the
    issues and PRs it mentions as `#N`, so it can tell whether what a `deferred` issue waits
    for is done. Only a confident (`min_confidence`, default 0.8) `deferred`,
-   `followup` or `skip` is settled there; issues it would start or comment on, issues with
+   `followup` or `skip` is settled there, and `deferred` only for an issue already
+   assessed `deferred`: the model tends to take any open issue an issue mentions as what
+   it waits for, so the LLM decides when an issue starts to wait. Issues it would start or comment on, issues with
    a `blocked` or `discussion` conversation under way, and large issues go on. If the API
    key (`TYPESAFE_API_KEY` by default) is missing or the call fails, everything goes on.
    Screening is off by default because the API is paid and needs a key.

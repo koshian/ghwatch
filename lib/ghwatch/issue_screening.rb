@@ -75,6 +75,10 @@ module Ghwatch
         confidence = answer["confidence"].to_f
         @log.info("[issue-#{number}] screening: #{status} (confidence #{format("%.2f", confidence)})")
         next unless SETTLES.include?(status) && confidence >= min_confidence
+        # The model is quick to read any open issue an issue mentions as what
+        # it waits for. It may keep an issue waiting, but the LLM decides
+        # that it starts to wait.
+        next if status == "deferred" && previous[number]&.fetch(:status, nil) != "deferred"
 
         settled[number] = {status: status, confidence: confidence, model: response["model"]}
       end

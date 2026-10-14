@@ -111,7 +111,7 @@ class TriageScreeningTest < Minitest::Test
   end
 
   def test_only_unsettled_issues_reach_the_llm_and_unchanged_ones_are_not_judged_again
-    client = Client.new(1 => ["deferred", 0.93], 2 => ["deferred", 0.5], 3 => ["ready", 0.99])
+    client = Client.new(1 => ["followup", 0.93], 2 => ["deferred", 0.5], 3 => ["ready", 0.99])
     roles = Roles.new { |numbers| assessed(numbers) }
     triage(roles, client).run
     assert_equal [1, 2, 3], client.calls
@@ -269,5 +269,15 @@ class TriageScreeningTest < Minitest::Test
     client = Client.new(1 => ["deferred", 0.95], 2 => ["skip", 0.95], 3 => ["skip", 0.95])
     triage(Roles.new { |numbers| assessed(numbers) }, client).run
     assert_equal [{"number" => 5, "kind" => "issue", "state" => "open"}], client.states.first["referenced"]
+  end
+
+  def test_screening_keeps_issues_waiting_but_only_the_llm_starts_a_wait
+    client = Client.new(1 => ["deferred", 0.98], 2 => ["deferred", 0.98], 3 => ["skip", 0.95])
+    roles = Roles.new { |numbers| assessed(numbers, status: "ready") }
+    @state.save_assessment(2, status: "deferred", reason: "waits for #5", comment: nil, signature: "old")
+    triage(roles, client).run
+    assert_equal [[1]], roles.calls, "a new deferred answer goes to the LLM; a kept one does not"
+    assert_equal "waits for #5", @state.assessment(2)[:reason], "kept waiting for the reason the LLM gave"
+    assert_equal "ready", @state.assessment(1)[:status]
   end
 end
