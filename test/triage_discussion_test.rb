@@ -84,4 +84,34 @@ class TriageDiscussionTest < Minitest::Test
     assert_equal false, compact["authorIsMaintainer"]
     assert_equal [true, false], compact["comments"].map { |comment| comment["authorIsMaintainer"] }
   end
+
+  class WatchedState
+    attr_reader :assessments, :settings
+
+    def initialize(assessments)
+      @assessments = assessments
+      @settings = {}
+    end
+
+    def delete_assessment(number) = @assessments.delete(number)
+
+    def set_setting(key, value) = @settings[key] = value
+
+    def setting(key) = @settings[key]
+  end
+
+  def test_a_closed_issue_stops_being_watched_instead_of_asking_for_triage_forever
+    state = WatchedState.new({60 => {status: "followup", issue_signature: "old"}, 87 => {status: "followup", issue_signature: "sig-87"}})
+    github = Object.new
+    def github.issue(number) = {"number" => number, "state" => (number == 60) ? "CLOSED" : "OPEN"}
+    def github.issue_signature(issue) = "sig-#{issue["number"]}"
+    triage = Ghwatch::IssueTriage.new(project: nil, config: OpenStruct.new(discovery_interval: 7200), state: state, github: github,
+      roles: nil, worktrees: nil, context_builder: nil, log: Ghwatch::Log.new(StringIO.new))
+    state.set_setting("last_discovery_at", Time.now.to_i)
+    triage.instance_variable_set(:@force, false)
+
+    triage.request_if_watched_issue_changed
+    assert_equal [87], state.assessments.keys
+    refute triage.due?, "nothing open changed"
+  end
 end

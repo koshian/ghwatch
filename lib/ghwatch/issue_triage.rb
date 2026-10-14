@@ -31,6 +31,13 @@ module Ghwatch
     def request_if_watched_issue_changed
       watched_assessments.each do |number, assessment|
         issue = @github.issue(number)
+        # Triage only reads open issues, so a closed one's assessment would
+        # never catch up and would ask for triage on every cycle.
+        if issue["state"].to_s.casecmp?("closed")
+          @state.delete_assessment(number)
+          @log.info("[issue-#{number}] closed; forgetting its #{assessment[:status]} assessment")
+          next
+        end
         next if @github.issue_signature(issue) == assessment[:issue_signature]
 
         @log.info("[issue-#{number}] discussion changed; scheduling triage")

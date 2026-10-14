@@ -58,6 +58,10 @@ module Ghwatch
       row && deserialize_assessment(row)
     end
 
+    def delete_assessment(number)
+      @db[:issue_assessments].where(issue_number: number).delete
+    end
+
     def save_assessment(number, status:, reason:, comment:, signature:, at: Time.now.to_i)
       row = {
         issue_number: number,
