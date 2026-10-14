@@ -4,6 +4,9 @@ module Ghwatch
   class Scheduler
     # How often a long wait checks whether a new ghwatch was installed.
     UPDATE_CHECK_INTERVAL = 60
+    # A cycle at least this long is followed by another look at GitHub
+    # before waiting.
+    RECHECK_AFTER = 60
 
     def initialize(task_engine:, review_intake:, issue_triage:, config:, github:, status_labels: nil, log: Log.new,
       self_update: nil, argv: [])
@@ -28,11 +31,12 @@ module Ghwatch
       @task_engine.audit_review_workspaces(trigger: "at ghwatch startup")
 
       while @running
+        started = Time.now
         cycle
         # Between cycles no agent runs, so this is where a new install takes over.
         return restart if updated?
 
-        wait(@config.poll_interval) if @running
+        pause(started)
         return restart if updated?
       end
 
@@ -60,6 +64,36 @@ module Ghwatch
     end
 
     private
+
+    # A long cycle may have missed new PRs, replies and pushes made while
+    # agents ran; look again so they do not wait out a whole poll.
+    def pause(cycle_started)
+      return unless @running
+
+      triage_requested = Time.now - cycle_started >= RECHECK_AFTER && recheck
+      wait(@config.poll_interval) if @running && !triage_requested
+    end
+
+    # What a cycle's first steps found, looked at again. Whatever needs work
+    # is scheduled to run now, so the wait that follows ends at once. Returns
+    # whether a changed issue asked for triage; one still due after a failed
+    # run does not count, or the loop would retry it without pause.
+    def recheck
+      triage_was_due = @issue_triage.due?
+      [
+        -> { @task_engine.reconcile_all },
+        -> { @review_intake.discover },
+        -> { @issue_triage.request_if_watched_issue_changed }
+      ].each do |step|
+        break unless @running
+
+        step.call
+      end
+      !triage_was_due && @issue_triage.due?
+    rescue => e
+      @log.error("recheck failed: #{e.class}: #{e.message}")
+      false
+    end
 
     def reload_config_if_changed
       @log.info("reloaded .ghwatch/config.toml") if @config.reload_if_changed!

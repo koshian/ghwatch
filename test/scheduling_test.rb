@@ -89,4 +89,53 @@ class SchedulingTest < Minitest::Test
       scheduler.instance_variable_get(:@wakeup_writer).close
     end
   end
+
+  class Recheck
+    attr_reader :events, :waited
+
+    def initialize(triage_due: [false, false])
+      @events = []
+      @triage_due = triage_due
+    end
+
+    def reconcile_all = @events << :reconcile
+
+    def discover = @events << :discover
+
+    def request_if_watched_issue_changed = @events << :watch
+
+    def due? = @triage_due.shift
+  end
+
+  def pausing_scheduler(recheck)
+    scheduler = Ghwatch::Scheduler.new(task_engine: recheck, review_intake: recheck, issue_triage: recheck,
+      config: OpenStruct.new(poll_interval: 600), github: nil, log: Ghwatch::Log.new(StringIO.new))
+    waits = []
+    scheduler.define_singleton_method(:wait) { |seconds| waits << seconds }
+    [scheduler, waits]
+  end
+
+  def test_a_long_cycle_looks_at_github_again_before_waiting
+    recheck = Recheck.new
+    scheduler, waits = pausing_scheduler(recheck)
+    scheduler.send(:pause, Time.now - Ghwatch::Scheduler::RECHECK_AFTER)
+    assert_equal %i[reconcile discover watch], recheck.events
+    assert_equal [600], waits, "found work is scheduled to run now, which ends the wait"
+
+    recheck = Recheck.new
+    scheduler, waits = pausing_scheduler(recheck)
+    scheduler.send(:pause, Time.now)
+    assert_empty recheck.events, "a short cycle has just looked"
+    assert_equal [600], waits
+  end
+
+  def test_a_newly_changed_issue_starts_the_next_cycle_without_waiting
+    scheduler, waits = pausing_scheduler(Recheck.new(triage_due: [false, true]))
+    scheduler.send(:pause, Time.now - Ghwatch::Scheduler::RECHECK_AFTER)
+    assert_empty waits
+
+    scheduler, waits = pausing_scheduler(Recheck.new(triage_due: [true, true]))
+    scheduler.send(:pause, Time.now - Ghwatch::Scheduler::RECHECK_AFTER)
+    assert_equal [600], waits, "triage still due after a failed run waits as usual"
+  end
 end
