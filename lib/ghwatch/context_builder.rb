@@ -19,6 +19,9 @@ module Ghwatch
         missing human information or a human decision. Use deferred when the issue explicitly
         waits for a future dependency, upgrade, release, external event, or other condition.
         Do not ask humans to repeat decisions already present in the issue discussion.
+        `referenced` gives the current state of the issues and pull requests a candidate
+        mentions as #N: a wait for a pull request that is merged or an issue that is closed
+        is over, so judge what remains rather than repeating the wait.
 
         Previous assessments may be stale; re-evaluate them against the current discussion.
 
@@ -26,7 +29,7 @@ module Ghwatch
         #{JSON.pretty_generate(previous_assessments)}
 
         Candidates:
-        #{JSON.pretty_generate(candidates.map { |issue| compact_issue(issue) })}
+        #{JSON.pretty_generate(candidates.map { |issue| triage_candidate(issue) })}
       TEXT
     end
 
@@ -229,6 +232,11 @@ module Ghwatch
         separately and note it for the maintainers. Repeat a request only if the answer does
         not cover it, and then say exactly what is still missing.
       TEXT
+    end
+
+    def triage_candidate(issue)
+      referenced = Array(issue["referenced"])
+      referenced.empty? ? compact_issue(issue) : compact_issue(issue).merge("referenced" => referenced)
     end
 
     def compact_issue(issue)

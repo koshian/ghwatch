@@ -13,8 +13,6 @@ module Ghwatch
     # character, so keep well below that and let larger issues go to the LLM.
     MAX_STATE_BYTES = 60_000
     COMMENT_BYTES = 4_000
-    # Issues and PRs an issue mentions whose state is looked up.
-    MAX_REFERENCES = 10
 
     STATUS_QUESTION = {
       "type" => "choice",
@@ -51,12 +49,12 @@ module Ghwatch
 
     # Returns {issue number => {status:, confidence:, model:}} for the issues
     # the model settled; an empty hash when screening is off or fails.
-    # references: number -> state of the issue or PR #number (nil if unknown).
+    # references: an IssueReferences, or a lookup (number -> state of the
+    # issue or PR #number) to build one from.
     def settle(issues, open_pull_requests:, previous:, references: nil)
       return {} unless enabled? && !issues.empty?
 
-      @references = references
-      @reference_cache = {}
+      @references = (references.nil? || references.is_a?(IssueReferences)) ? references : IssueReferences.new(lookup: references, log: @log)
 
       client = @client || build_client
       return {} unless client
@@ -128,28 +126,9 @@ module Ghwatch
         },
         "open_pull_requests" => open_pull_requests.map { |pr| {"number" => pr["number"], "title" => pr["title"]} }
       }
-      referenced = referenced_states(issue, comments)
+      referenced = @references ? @references.for(issue, comments: comments) : []
       state["referenced"] = referenced unless referenced.empty?
       state
-    end
-
-    # What the issue waits for is usually named as #N; without its state the
-    # model cannot tell whether the wait is over.
-    def referenced_states(issue, comments)
-      return [] unless @references
-
-      text = ([issue["body"]] + comments.map { |comment| comment["body"] }).join("\n")
-      numbers = text.scan(/(?<![\w\/&])#(\d+)\b/).flatten.map(&:to_i).uniq - [issue["number"]]
-      numbers.first(MAX_REFERENCES).filter_map do |number|
-        @reference_cache.fetch(number) { @reference_cache[number] = lookup_reference(number) }
-      end
-    end
-
-    def lookup_reference(number)
-      @references.call(number)
-    rescue => e
-      @log.warn("could not read the state of ##{number}: #{e.message}")
-      nil
     end
 
     def maintainer?(association)

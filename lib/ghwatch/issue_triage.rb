@@ -67,12 +67,13 @@ module Ghwatch
 
       unchanged, changed = details.partition { |issue| unchanged?(issue, previous[issue["number"]]) }
       @log.info("triage: #{unchanged.size} unchanged issue(s) kept as assessed") unless unchanged.empty?
-      changed = screen(changed, previous)
+      references = IssueReferences.new(lookup: ->(number) { @github.reference(number) }, log: @log)
+      changed = screen(changed, previous, references)
 
       selected = []
       unless changed.empty?
         context = @context_builder.triage(
-          candidates: changed,
+          candidates: changed.map { |issue| issue.merge("referenced" => references.for(issue)) },
           available_slots: available_slots,
           previous_assessments: changed.to_h { |issue| [issue["number"], previous[issue["number"]]] }
         )
@@ -118,11 +119,11 @@ module Ghwatch
     end
 
     # Saves what the decision model settles and returns the rest.
-    def screen(issues, previous)
+    def screen(issues, previous, references)
       return issues unless @screening.enabled? && !issues.empty?
 
       settled = @screening.settle(issues, open_pull_requests: @github.open_pull_requests, previous: previous,
-        references: ->(number) { @github.reference(number) })
+        references: references)
       issues.reject do |issue|
         number = issue["number"]
         decision = settled[number] or next false

@@ -55,14 +55,16 @@ class TriageScreeningTest < Minitest::Test
   end
 
   class Roles
-    attr_reader :calls
+    attr_reader :calls, :contexts
 
     def initialize(&decide)
       @decide = decide
       @calls = []
+      @contexts = []
     end
 
     def run(role, context:, cwd:)
+      @contexts << context
       numbers = context.scan(/"number": (\d+)/).flatten.map(&:to_i).uniq
       @calls << numbers
       data = @decide.call(numbers)
@@ -279,5 +281,15 @@ class TriageScreeningTest < Minitest::Test
     assert_equal [[1]], roles.calls, "a new deferred answer goes to the LLM; a kept one does not"
     assert_equal "waits for #5", @state.assessment(2)[:reason], "kept waiting for the reason the LLM gave"
     assert_equal "ready", @state.assessment(1)[:status]
+  end
+
+  def test_the_llm_is_told_whether_what_an_issue_waits_for_is_done
+    @github.issues = {370 => issue(370, body: "Wait for #364 to be merged")}
+    @github.define_singleton_method(:reference) { |number| {"number" => number, "kind" => "pull_request", "state" => "merged"} }
+    roles = Roles.new { {"selected_issues" => [], "assessments" => []} }
+    triage(roles, Client.new(370 => ["ready", 0.5])).run
+    candidate = JSON.parse(roles.contexts.first[/Candidates:\n(.*)\z/m, 1]).first
+    assert_equal [{"number" => 364, "kind" => "pull_request", "state" => "merged"}], candidate["referenced"]
+    assert_includes roles.contexts.first, "a wait for a pull request that is merged"
   end
 end

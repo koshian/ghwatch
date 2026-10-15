@@ -501,7 +501,8 @@ Triage runs in up to three stages and skips work it has already done:
    a `blocked` or `discussion` conversation under way, and large issues go on. If the API
    key (`TYPESAFE_API_KEY` by default) is missing or the call fails, everything goes on.
    Screening is off by default because the API is paid and needs a key.
-3. The triage role (an LLM, with model fallbacks as for any role) judges the rest.
+3. The triage role (an LLM, with model fallbacks as for any role) judges the rest. It is
+   given the same states of what each issue mentions as `#N`.
 
 Triage asks whether an issue should be done before whether it can be. Proposals of
 doubtful value or outside the project's goals, requests for behavior that could harm users
