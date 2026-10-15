@@ -21,7 +21,7 @@ module Ghwatch
       return github.pull_request(task.pr_number) if task.pr_number
       return nil unless task.branch
 
-      summary = github.pull_request_for_branch(task.branch)
+      summary = github.pull_request_for_branch(task.branch, since: task.metadata["started_at"])
       summary && github.pull_request(summary["number"])
     end
 

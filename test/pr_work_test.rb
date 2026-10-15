@@ -16,7 +16,7 @@ class PrWorkTest < Minitest::Test
 
     def pull_request(number) = prs.fetch(number)
 
-    def pull_request_for_branch(branch) = nil
+    def pull_request_for_branch(branch, since: nil) = nil
 
     def issue(number) = {"number" => number, "state" => "OPEN"}
   end

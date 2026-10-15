@@ -218,6 +218,7 @@ module Ghwatch
       branch, worktree = @worktrees.prepare(number)
       task = Task.for_issue(number, branch: branch, worktree: worktree)
       task.retry_at = Time.now.to_i
+      task.metadata["started_at"] = Time.now.to_i
       @state.save_task(task)
       @log.info("[#{task.id}] selected for implementation")
     rescue => e

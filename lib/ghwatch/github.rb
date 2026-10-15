@@ -148,12 +148,14 @@ module Ghwatch
       Array(data.dig("data", "repository", "pullRequest", "closingIssuesReferences", "nodes"))
     end
 
-    def pull_request_for_branch(branch)
+    # since: ignore PRs opened before this time. A reopened issue's new task
+    # uses the same branch name as the one whose PR already merged.
+    def pull_request_for_branch(branch, since: nil)
       prs = gh_json(
-        "pr", "list", "--state", "all", "--head", branch, "--limit", "1",
-        "--json", "number,title,state,url,headRefName,headRefOid,mergedAt,updatedAt"
+        "pr", "list", "--state", "all", "--head", branch, "--limit", "5",
+        "--json", "number,title,state,url,headRefName,headRefOid,mergedAt,updatedAt,createdAt"
       )
-      prs.first
+      prs.find { |pr| since.nil? || pr["createdAt"].nil? || Time.parse(pr["createdAt"]).to_i >= since }
     end
 
     def post_issue_comment(number, body, kind:, model_signature: nil)

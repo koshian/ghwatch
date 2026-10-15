@@ -68,6 +68,20 @@ class GithubPrTest < Minitest::Test
     command.verify
   end
 
+  def test_a_new_task_does_not_take_the_merged_pr_of_an_earlier_one_on_the_same_branch
+    prs = [{"number" => 388, "state" => "MERGED", "createdAt" => "2026-10-14T18:49:39Z"}]
+    command = Object.new
+    command.define_singleton_method(:run) do |*args, **options|
+      Ghwatch::Command::Result.new(argv: args, stdout: JSON.generate(prs), stderr: "", exit_code: 0, timed_out: false)
+    end
+    github = Github.new(project: OpenStruct.new(root: "."), command: command)
+    assert_equal 388, github.pull_request_for_branch("ghwatch/issue-387")["number"]
+    assert_nil github.pull_request_for_branch("ghwatch/issue-387", since: Time.parse("2026-10-15T02:38:00Z").to_i)
+
+    prs.unshift({"number" => 395, "state" => "OPEN", "createdAt" => "2026-10-15T03:00:00Z"})
+    assert_equal 395, github.pull_request_for_branch("ghwatch/issue-387", since: Time.parse("2026-10-15T02:38:00Z").to_i)["number"]
+  end
+
   def reference(payload)
     command = Minitest::Mock.new
     result = Ghwatch::Command::Result.new(argv: [], stdout: JSON.generate(payload), stderr: "", exit_code: 0, timed_out: false)

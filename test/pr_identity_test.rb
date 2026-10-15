@@ -25,7 +25,7 @@ class PrIdentityTest < Minitest::Test
       pr
     end
 
-    def pull_request_for_branch(branch)
+    def pull_request_for_branch(branch, since: nil)
       pr if pr && pr["headRefName"] == branch
     end
 
