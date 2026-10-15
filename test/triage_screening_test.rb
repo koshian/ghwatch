@@ -6,7 +6,7 @@ require "stringio"
 
 class TriageScreeningTest < Minitest::Test
   class Github
-    attr_accessor :issues, :merged_at
+    attr_accessor :issues, :merged_at, :closed_at
     attr_reader :read
 
     def initialize(issues)
@@ -27,6 +27,8 @@ class TriageScreeningTest < Minitest::Test
     def open_pull_requests = [{"number" => 172, "title" => "Start at login"}]
 
     def last_merged_at = @merged_at
+
+    def last_closed_issue_at = @closed_at
 
     def reference(number) = {"number" => number, "kind" => "issue", "state" => "open"}
   end
@@ -337,5 +339,49 @@ class TriageScreeningTest < Minitest::Test
     @state.tasks = [done]
     triage(Roles.new { |numbers| assessed(numbers) }, client).run
     assert_equal [1, 1], client.calls, "reopened, or waiting for a person: judged again"
+  end
+
+  def test_a_followup_issue_is_judged_again_after_an_issue_closes
+    client = Client.new(1 => ["followup", 0.95])
+    @github.issues = {1 => issue(1)}
+    triage(Roles.new { |numbers| assessed(numbers) }, client).run
+    @state.backdate(1, 10)
+    @github.closed_at = Time.now.to_i - 5
+    triage(Roles.new { |numbers| assessed(numbers) }, client).run
+    assert_equal [1, 1], client.calls
+  end
+
+  def closing_triage(issue, states)
+    @github.issues = {issue["number"] => issue}
+    closed = []
+    @github.define_singleton_method(:reference) { |number| states.fetch(number) }
+    @github.define_singleton_method(:close_issue) { |number, comment:, model_signature:| closed << [number, comment] }
+    roles = Roles.new do |numbers|
+      {"selected_issues" => [], "assessments" => [{"issue" => issue["number"], "status" => "close", "reason" => "children done",
+                                                   "comment" => "Completed by #368 and #369."}]}
+    end
+    triage(roles, Client.new(issue["number"] => ["close", 0.9])).run
+    closed
+  end
+
+  def test_triage_closes_a_parent_issue_once_its_children_are_completed
+    done = ->(number) { {"number" => number, "kind" => "issue", "state" => "closed", "closedAs" => "completed"} }
+    closed = closing_triage(issue(367, body: "Children: #368, #369, and PR #400"),
+      {368 => done.call(368), 369 => done.call(369), 400 => {"number" => 400, "kind" => "pull_request", "state" => "merged"}})
+    assert_equal [[367, "Completed by #368 and #369."]], closed
+    assert_equal "close", @state.assessment(367)[:status]
+  end
+
+  def test_triage_does_not_close_while_a_child_is_open_unless_a_maintainer_spoke_last
+    states = {368 => {"number" => 368, "kind" => "issue", "state" => "closed", "closedAs" => "completed"},
+              369 => {"number" => 369, "kind" => "issue", "state" => "open"}}
+    assert_empty closing_triage(issue(367, body: "Children: #368, #369"), states)
+    assert_equal "followup", @state.assessment(367)[:status]
+    assert_includes @log.string, "keeping it as followup"
+
+    setup
+    parent = issue(367, body: "Children: #368, #369")
+    parent["comments"] = [{"author_association" => "OWNER", "body" => "#369 is dropped; this is done."}]
+    assert_equal [367], closing_triage(parent, states).map(&:first)
   end
 end

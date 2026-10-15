@@ -101,6 +101,11 @@ module Ghwatch
         .filter_map { |pr| pr["mergedAt"] && Time.parse(pr["mergedAt"]).to_i }.max
     end
 
+    def last_closed_issue_at
+      gh_json("issue", "list", "--state", "closed", "--search", "sort:updated-desc", "--limit", "20", "--json", "closedAt")
+        .filter_map { |issue| issue["closedAt"] && Time.parse(issue["closedAt"]).to_i }.max
+    end
+
     def open_pull_requests(limit: 100)
       gh_json(
         "pr", "list", "--state", "open", "--limit", limit.to_s,

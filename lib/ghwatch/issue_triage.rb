@@ -27,7 +27,7 @@ module Ghwatch
       @started_at = Time.now.to_i
       # The latest merge is read once per run; the triage object lives as
       # long as ghwatch does.
-      remove_instance_variable(:@last_merged_at) if defined?(@last_merged_at)
+      remove_instance_variable(:@last_resolved_at) if defined?(@last_resolved_at)
       @done_at = nil
       candidates = candidate_issues
       return if candidates.empty?
@@ -65,7 +65,7 @@ module Ghwatch
           return
         end
 
-        save_assessments(outcome, changed)
+        save_assessments(outcome, changed, references)
         selected = selected_issues(outcome)
       end
 
@@ -90,11 +90,12 @@ module Ghwatch
       # Its task finished since, yet the issue is open: reopened, or waiting
       # for a person to verify.
       return false if done_at[number].to_i > assessed
-      return true unless previous[:status] == "deferred"
+      return true unless %w[deferred followup].include?(previous[:status])
 
-      # What a deferred issue waits for is usually a merge elsewhere.
-      merged_at = last_merged_at
-      merged_at.nil? || merged_at < assessed
+      # What a deferred issue waits for is usually a merge or another issue
+      # elsewhere, and a followup issue may be done once its children are.
+      resolved_at = last_resolved_at
+      resolved_at.nil? || resolved_at < assessed
     end
 
     def done_at
@@ -107,13 +108,14 @@ module Ghwatch
       numbers.select { |number| previous[number]&.fetch(:status) == "ready" }.sort
     end
 
-    def last_merged_at
-      return @last_merged_at if defined?(@last_merged_at)
+    # The latest merge or issue close, read once per run.
+    def last_resolved_at
+      return @last_resolved_at if defined?(@last_resolved_at)
 
-      @last_merged_at = begin
-        @github.last_merged_at
+      @last_resolved_at = begin
+        [@github.last_merged_at, @github.last_closed_issue_at].compact.max
       rescue => e
-        @log.warn("could not read the latest merge time: #{e.message}")
+        @log.warn("could not read the latest merge or close: #{e.message}")
         Time.now.to_i
       end
     end
@@ -152,7 +154,7 @@ module Ghwatch
       [@config.max_workers - used, 0].max
     end
 
-    def save_assessments(outcome, details)
+    def save_assessments(outcome, details, references = nil)
       details_by_number = details.to_h { |issue| [issue["number"], issue] }
 
       Array(outcome.data["assessments"]).each do |assessment|
@@ -168,6 +170,19 @@ module Ghwatch
           status = "skip"
           reason = "harmful request skipped by configuration: #{reason}"
           comment = nil
+        end
+
+        if status == "close"
+          if closable?(issue, references)
+            @github.close_issue(number, comment: comment, model_signature: outcome.signature)
+            @log.info("[issue-#{number}] closed by triage: #{reason}")
+          else
+            @log.info("[issue-#{number}] triage would close it, but neither are all its mentioned issues closed " \
+              "nor did a maintainer have the last word; keeping it as followup")
+            status = "followup"
+            reason = "close declined by ghwatch: #{reason}"
+            comment = nil
+          end
         end
 
         if should_post_blocker?(status, comment, previous, reason)
@@ -190,6 +205,17 @@ module Ghwatch
           issue_updated_at: issue["updatedAt"]
         )
       end
+    end
+
+    # A model's word alone does not close an issue: everything it mentions
+    # must be finished, or a maintainer must have spoken last.
+    def closable?(issue, references)
+      referenced = references ? references.for(issue).select { |item| item["kind"] == "issue" } : []
+      return true if !referenced.empty? && referenced.all? { |item| item["state"] == "closed" && item["closedAs"] == "completed" }
+
+      last = Array(issue["comments"]).reject { |comment| comment.fetch("body", "").include?(Github::MARKER_PREFIX) }.last
+      association = last && (last["author_association"] || last["authorAssociation"])
+      Github::MAINTAINER_ASSOCIATIONS.include?(association)
     end
 
     def should_post_blocker?(status, comment, previous, reason)

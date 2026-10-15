@@ -32,7 +32,9 @@ module Ghwatch
           "being merged, another issue being done, or a release, and that event has not happened yet: " \
           "what it waits for is still open in `referenced` or `open_pull_requests`, or is a release not made yet.",
         "followup" => "The implementation is done; the issue stays open only for a person to verify, release or reply.",
-        "skip" => "A maintainer declined it, or it needs no work at all."
+        "skip" => "A maintainer declined it, or it needs no work at all.",
+        "close" => "Nothing is left to do or watch: a parent or tracking issue whose child issues are all " \
+          "closed in `referenced`, or a maintainer said it is done or may be closed."
       }
     }.freeze
 

@@ -61,10 +61,10 @@ module Ghwatch
           "assessments": [
             {
               "issue": 123,
-              "status": "ready|blocked|discussion|deferred|followup|skip",
+              "status": "ready|blocked|discussion|deferred|followup|skip|close",
               "concern": "value|harmful|architecture|other, only for discussion",
               "reason": "short factual reason",
-              "comment": "human-facing clarification request, discussion points, or null"
+              "comment": "human-facing clarification request, discussion points, closing note, or null"
             }
           ]
         }
@@ -79,6 +79,11 @@ module Ghwatch
         is intentionally waiting for a future dependency or event and should not ask the
         human to repeat a decision already recorded. followup means implementation is not
         the next action, but ghwatch should continue watching for a response or verification.
+        close means nothing is left to do or watch: a parent or tracking issue whose child
+        issues are all closed as completed (see referenced), or one a maintainer said is done
+        or may be closed. ghwatch then closes it with comment, which says briefly why it is
+        complete (for a parent issue, which child issues did the work). Never close an issue
+        whose own requested work, verification or reply is still outstanding.
       TEXT
     end
 

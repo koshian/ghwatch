@@ -25,9 +25,11 @@ module Ghwatch
       "deferred" => ["ghwatch:deferred", "c5def5", "ghwatch triage: waits for another PR, issue or release"],
       "followup" => ["ghwatch:followup", "c5def5", "ghwatch triage: waits for a person to verify, release or reply"],
       "skip" => ["ghwatch:skip", "c5def5", "ghwatch triage: declined or needs no work"],
+      # Closed by triage: it carries no status label.
+      "close" => [nil],
       nil => ["ghwatch:untriaged", "ededed", "ghwatch has not judged this issue yet"]
     }.freeze
-    MANAGED = (LABELS.values + TRIAGE_LABELS.values.map(&:first)).uniq.freeze
+    MANAGED = (LABELS.values + TRIAGE_LABELS.values.map(&:first)).compact.uniq.freeze
 
     def initialize(state:, github:, config:, log: Log.new)
       @state = state

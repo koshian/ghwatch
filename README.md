@@ -489,6 +489,9 @@ The triage role classifies issues as:
 - `deferred` — intentionally waiting for a future dependency/event
 - `followup` — no new implementation now, but human verification or another response is worth watching
 - `skip` — not actionable for ghwatch
+- `close` — nothing left to do or watch, such as a parent issue whose child issues are all
+  completed; ghwatch closes it with a note. It does so only when every issue it mentions is
+  closed as completed, or a maintainer wrote the last comment; otherwise it stays `followup`
 
 Triage runs at the end of every poll, once everything that could run has run and what is
 left waits for CI or a person, and only while a worker slot is free: issues are looked for
@@ -500,8 +503,8 @@ up on the next idle poll. It runs in up to three stages and skips work it has al
    title, body and comments; ghwatch relabeling an issue does not count, and an issue
    whose `updatedAt` in the issue list is the one last seen is not read at all. An issue
    that is still open after its task finished (reopened, or waiting for verification) is
-   judged again. A `deferred` issue is also judged again after any PR merge, since that
-   is usually what it waits for. An unchanged
+   judged again. A `deferred` or `followup` issue is also judged again after any PR
+   merge or issue close, since that is usually what it waits for. An unchanged
    `ready` issue starts as soon as a worker slot opens. Issues that are ready start oldest
    (lowest number) first; the model decides which are ready, not the order.
 2. With `[triage.screening]` enabled, a decision model (TypeSafe Jev, `POST /v1/systemone`)

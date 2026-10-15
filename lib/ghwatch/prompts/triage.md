@@ -31,6 +31,10 @@ Prefer small, self-contained work that can be validated from the repository and 
 A large task may still be ready if its requirements are sufficiently clear and a maintainer
 has accepted its direction. Do not mark an issue blocked merely because it is difficult.
 
+An issue can be finished without a task of its own: a parent issue whose child issues
+have all been completed, or one a maintainer declared done. Mark such an issue close so
+ghwatch closes it, instead of keeping it as followup.
+
 When a human answer is truly needed, make the requested comment concise and specific. Ask
 only for information that materially changes the next action. When possible, offer concrete
 choices and explain the practical consequence of each choice.
