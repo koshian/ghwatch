@@ -18,6 +18,7 @@ module Ghwatch
       events = {}
 
       events["issue_closed"] = {} if issue_closed?(task, snapshot.issue)
+      events["handed_off"] = {} if handed_off?(snapshot)
       if pull_request
         pull_request_events(task, pull_request, observed, events)
       elsif needs_pull_request?(task)
@@ -89,6 +90,12 @@ module Ghwatch
       since = task.metadata["state_since"]
       closed_at = issue["closedAt"] && Time.parse(issue["closedAt"]).to_i
       since && closed_at && closed_at > since
+    end
+
+    def handed_off?(snapshot)
+      [snapshot.issue, snapshot.pull_request].any? do |item|
+        Github.hands_off?(item, viewer: -> { @github.viewer_login })
+      end
     end
 
     def needs_pull_request?(task)

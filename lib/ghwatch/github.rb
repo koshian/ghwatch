@@ -39,6 +39,26 @@ module Ghwatch
       @default_branch ||= gh_json("repo", "view", "--json", "defaultBranchRef").dig("defaultBranchRef", "name")
     end
 
+    # A maintainer hands an issue or PR to someone else by labelling it or by
+    # assigning it to another account; ghwatch then leaves it alone.
+    HANDS_OFF_LABEL = "ghwatch:hands-off"
+
+    # viewer: the account ghwatch works as, asked only when the item has
+    # assignees.
+    def self.hands_off?(item, viewer:)
+      return false unless item.is_a?(Hash)
+
+      labels = Array(item["labels"]).map { |label| label.is_a?(Hash) ? label["name"] : label }
+      return true if labels.include?(HANDS_OFF_LABEL)
+
+      assignees = Array(item["assignees"]).map { |assignee| assignee.is_a?(Hash) ? assignee["login"] : assignee }
+      !assignees.empty? && !(assignees - [viewer.call]).empty?
+    end
+
+    def viewer_login
+      @viewer_login ||= gh_api("user").fetch("login")
+    end
+
     def open_issues(limit: 100)
       gh_json(
         "issue", "list", "--state", "open", "--limit", limit.to_s,
@@ -84,7 +104,8 @@ module Ghwatch
     def open_pull_requests(limit: 100)
       gh_json(
         "pr", "list", "--state", "open", "--limit", limit.to_s,
-        "--json", "number,title,body,url,isDraft,headRefName,headRefOid,baseRefName,updatedAt,mergeable,statusCheckRollup"
+        "--json", "number,title,body,url,isDraft,headRefName,headRefOid,baseRefName,updatedAt,mergeable,statusCheckRollup," \
+                  "labels,assignees"
       ).sort_by { |pull_request| pull_request.fetch("number") }
     end
 
@@ -92,7 +113,7 @@ module Ghwatch
       pull_request = gh_json(
         "pr", "view", number.to_s,
         "--json", "number,title,body,state,url,isDraft,headRefName,headRefOid,baseRefName,updatedAt,mergedAt," \
-                  "mergeable,statusCheckRollup,reviewDecision,reviews,headRepository,headRepositoryOwner"
+                  "mergeable,statusCheckRollup,reviewDecision,reviews,headRepository,headRepositoryOwner,labels,assignees"
       )
       head_repository = pull_request["headRepository"]
       owner = pull_request.dig("headRepositoryOwner", "login")

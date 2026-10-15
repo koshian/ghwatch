@@ -36,14 +36,20 @@ module Ghwatch
       @log = log
       @synced = {}
       @labelled_prs = {}
+      # Issues marked for someone else, as the last issue listing showed.
+      @handed_off = {}
     end
 
     def sync_all
       return unless @config.status_labels?
 
       @synced.clear
+      @handed_off.clear
       tasks = @state.tasks
-      open_issues.each { |issue| sync_issue_number(issue["number"], current: issue["labels"]) }
+      open_issues.each do |issue|
+        @handed_off[issue["number"]] = Github.hands_off?(issue, viewer: -> { @github.viewer_login })
+        sync_issue_number(issue["number"], current: issue["labels"])
+      end
       tasks.filter_map(&:issue_number).uniq.each { |number| sync_issue_number(number) }
       tasks.select(&:pr_number).reject(&:done?).group_by(&:pr_number).each_value { |group| sync_pull_request(group.last) }
     end
@@ -74,10 +80,10 @@ module Ghwatch
     # would change nothing.
     def sync_issue_number(number, current: nil)
       label, color, description = issue_label(number)
-      return if @synced[number] == label
+      return if @synced.key?(number) && @synced[number] == label
 
       names = current&.map { |item| item.is_a?(Hash) ? item["name"] : item }
-      unless names && (names & MANAGED) == [label]
+      unless names && (names & MANAGED) == [label].compact
         @github.sync_issue_state_label(number, label: label, managed_labels: MANAGED, color: color, description: description)
       end
       @synced[number] = label
@@ -88,13 +94,17 @@ module Ghwatch
     # An active task shows its state. Otherwise the newer of the last task's
     # end and the triage assessment wins: triage judges an issue again after
     # its task, and a task started from an assessment ends after it.
+    # An issue someone else took carries none of ghwatch's labels; their
+    # assignment or the hands-off label says who has it.
     def issue_label(number)
       tasks = @state.tasks.select { |task| task.issue_number == number }
       active = tasks.reverse.find { |task| !task.done? }
       return task_label(active.state) if active
+      return [nil] if @handed_off[number]
 
       last = tasks.last
       assessment = @state.assessment(number)
+      return [nil] if last&.metadata&.dig("handed_off") && !(assessment && assessment[:updated_at].to_i >= last.metadata["state_since"].to_i)
       if assessment && (last.nil? || assessment[:updated_at].to_i >= last.metadata["state_since"].to_i)
         TRIAGE_LABELS.fetch(assessment[:status], TRIAGE_LABELS[nil])
       elsif last

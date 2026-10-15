@@ -67,6 +67,7 @@ module Ghwatch
       cleanup_review: "remove the review workspace",
       cleanup: "remove worktrees",
       abandon_pr: "close the PR, delete the branch and worktrees",
+      hand_off: "leave the PR and its branch to them",
       rework_conflict: "rework: conflict",
       rework_failed_checks: "rework: failed checks",
       rework_review: "rework: the latest review",
@@ -168,6 +169,15 @@ module Ghwatch
         wait_work: rule("done", :clear_wait, :abandon_pr),
         wait_final: rule("done", :clear_wait, :cleanup),
         finalizing: rule("done", :clear_wait, :cleanup)
+      }],
+      ["handed_off", "Someone else took the issue or PR (assigned to them, or labelled `ghwatch:hands-off`)", {
+        worker: rule("done", :clear_wait, :hand_off, :cleanup),
+        review: rule("done", :clear_wait, :hand_off, :cleanup),
+        checking: rule("done", :clear_wait, :hand_off, :cleanup),
+        merge: rule("done", :clear_wait, :hand_off, :cleanup),
+        wait_work: rule("done", :clear_wait, :hand_off, :cleanup),
+        wait_final: rule("done", :clear_wait, :hand_off, :cleanup),
+        finalizing: rule("done", :clear_wait, :hand_off, :cleanup)
       }],
       ["pr_closed", "PR closed unmerged", {
         worker: rule(:implementing_or_done, :clear_wait, :reset_rounds, :forget_pr, :cleanup_review, :run_now),
@@ -431,6 +441,8 @@ module Ghwatch
       when :cleanup_review then @worktrees&.cleanup_review(task)
       when :cleanup then @worktrees&.cleanup(task)
       when :abandon_pr then abandon_pull_request(task)
+      # The PR is not reviewed or picked up again; its branch stays on GitHub.
+      when :hand_off then task.metadata["handed_off"] = true
       when :rework_conflict
         task.metadata["rework_reason"] = "Resolve conflicts with the PR base branch, test, and push updates to the existing PR."
       # The review on the PR says what to change; an older reason (a conflict

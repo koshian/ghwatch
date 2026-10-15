@@ -158,6 +158,13 @@ active task it shows the triage assessment (or the task's end, whichever is newe
 `ghwatch:untriaged` when triage has not judged it yet (for example beyond
 `project.candidate_limit`). `ghwatch status` shows the reasons.
 
+To give an Issue or PR to someone else, assign it to them (any account other than the one
+ghwatch works as) or label it `ghwatch:hands-off`. ghwatch then leaves it alone: triage
+skips the Issue, the PR is not reviewed, and a task already working on either stops,
+removing its worktrees but leaving the PR and its branch for them to take over. Such an
+Issue carries none of ghwatch's status labels. Removing the mark makes the Issue a triage
+candidate again; a PR of a stopped task stays out of review.
+
 Open PRs that ghwatch works on carry a label from the same set: `implementing` (draft),
 `changes-requested` (the worker is reworking it), `waiting-for-review`, `ready-to-merge`,
 `waiting-for-human-input` and `waiting-for-human-test`. PRs without a source Issue are

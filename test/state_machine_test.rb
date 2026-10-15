@@ -55,6 +55,8 @@ class StateMachineTest < Minitest::Test
     "pr_merged" => {worker: "finalizing", review: "finalizing", checking: "finalizing", merge: "finalizing", wait_work: "finalizing"},
     "issue_closed" => {worker: "done", review: "done", checking: "done", merge: "done", wait_work: "done", wait_final: "done",
                        finalizing: "done"},
+    "handed_off" => {worker: "done", review: "done", checking: "done", merge: "done", wait_work: "done", wait_final: "done",
+                     finalizing: "done"},
     "pr_closed" => {worker: "implementing", review: "implementing", checking: "implementing", merge: "implementing",
                     wait_work: "implementing"},
     "pr_missing" => {review: "continuing", checking: "continuing", merge: "continuing", wait_work: "continuing",
@@ -217,6 +219,16 @@ class StateMachineTest < Minitest::Test
     assert_equal [[:close, 9], [:delete, "ghwatch/issue-7"]], @github.calls
     assert_includes @worktrees.calls, :cleanup
     assert task.done?
+  end
+
+  def test_handing_off_leaves_the_pr_and_branch_and_stops_the_task
+    task = task_in(:wait_work)
+    @machine.react(task, {"handed_off" => {}})
+    assert_equal "done", task.state
+    assert task.metadata["handed_off"]
+    assert_nil task.human_marker
+    assert_includes @worktrees.calls, :cleanup
+    assert_empty @github.calls, "the PR stays open and its branch on GitHub"
   end
 
   def test_tasks_without_an_issue_end_with_their_pr_and_keep_its_number
