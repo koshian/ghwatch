@@ -113,7 +113,7 @@ module Ghwatch
       pull_request = gh_json(
         "pr", "view", number.to_s,
         "--json", "number,title,body,state,url,isDraft,headRefName,headRefOid,baseRefName,updatedAt,mergedAt," \
-                  "mergeable,statusCheckRollup,reviewDecision,reviews,headRepository,headRepositoryOwner,labels,assignees"
+                  "mergeable,statusCheckRollup,reviewDecision,reviews,headRepository,headRepositoryOwner,labels,assignees,author"
       )
       head_repository = pull_request["headRepository"]
       owner = pull_request.dig("headRepositoryOwner", "login")

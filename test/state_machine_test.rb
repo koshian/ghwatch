@@ -78,11 +78,13 @@ class StateMachineTest < Minitest::Test
     },
     "reviewer" => {
       "branch_updated" => "same", "merge" => "ready_to_merge", "changes_requested" => "changes_requested",
+      "author_changes" => "waiting_for_review",
       "waiting_for_human_input" => "waiting_for_human_input", "waiting_for_human_test" => "waiting_for_human_test",
       "comment" => "same", "retry" => "same", "already_reviewed" => "same", "pr_changed" => "same", "failed" => "same"
     },
     "test_judge" => {
       "passed" => "ready_to_merge", "problem" => "changes_requested", "incomplete" => "waiting_for_human_test",
+      "author_changes" => "waiting_for_review",
       "pr_changed" => "waiting_for_review", "retry" => "same", "failed" => "same"
     },
     "merge" => {
@@ -229,6 +231,24 @@ class StateMachineTest < Minitest::Test
     assert_nil task.human_marker
     assert_includes @worktrees.calls, :cleanup
     assert_empty @github.calls, "the PR stays open and its branch on GitHub"
+  end
+
+  def test_a_pr_ghwatch_only_reviews_never_goes_to_the_worker
+    task = Ghwatch::Task.for_pr(395)
+    task.metadata["review_only"] = true
+    task.state = "waiting_for_review"
+    assert_equal "pushed", @machine.react(task, {"conflict" => {}, "pushed" => {head: "h2", from: "h1"}}),
+      "a conflict is the author's to resolve; a later event still applies"
+    assert_equal "waiting_for_review", task.state
+    task.state = "ready_to_merge"
+    assert_nil @machine.react(task, {"checks_failed" => {head: "h3", failed: ["CI"]}})
+    assert_equal "ready_to_merge", task.state
+
+    task.state = "waiting_for_human_input"
+    task.human_marker = "m"
+    task.metadata["resume_state"] = "changes_requested"
+    @machine.react(task, {"reply" => {question: {}, replies: []}})
+    assert_equal "waiting_for_review", task.state, "the answer goes to the reviewer"
   end
 
   def test_tasks_without_an_issue_end_with_their_pr_and_keep_its_number

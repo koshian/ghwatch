@@ -45,7 +45,9 @@ module Ghwatch
     # the task is in when it starts waiting).
     # guard: :new applies only when the condition is newly observed;
     # :new_head applies once per PR head; :changes_pr applies unless the push
-    # only merged the base in, which leaves what a person checked unchanged.
+    # only merged the base in, which leaves what a person checked unchanged;
+    # :worker_may_push applies unless ghwatch only reviews the PR (someone
+    # else's PR, which their author changes). Several guards must all hold.
     Rule = Data.define(:to, :effects, :resume, :guard) do
       def initialize(to: nil, effects: [], resume: nil, guard: nil) = super
     end
@@ -92,6 +94,7 @@ module Ghwatch
         "branch_updated" => rule(nil, :run_now),
         "merge" => rule("ready_to_merge", :run_now),
         "changes_requested" => rule(:rework_or_escalate, :rework_review, :count_rework, :run_now),
+        "author_changes" => rule("waiting_for_review", :retry_later),
         "waiting_for_human_input" => rule("waiting_for_human_input", :start_wait, resume: "waiting_for_review"),
         "waiting_for_human_test" => rule("waiting_for_human_test", :start_wait, resume: "checking_test_result"),
         "comment" => rule(nil, :retry_later),
@@ -103,6 +106,7 @@ module Ghwatch
       "test_judge" => {
         "passed" => rule("ready_to_merge", :run_now),
         "problem" => rule(:rework_or_escalate, :rework_review, :count_rework, :run_now),
+        "author_changes" => rule("waiting_for_review", :retry_later),
         "incomplete" => rule("waiting_for_human_test", :start_wait, resume: "checking_test_result"),
         "pr_changed" => rule("waiting_for_review", :run_now),
         "retry" => rule(nil, :retry_later),
@@ -134,6 +138,8 @@ module Ghwatch
       ["worker", "no_pr"] => "Ready or done reported, but no PR exists",
       ["worker", "no_change"] => "`continue` without any change to the repository or the PR",
       ["reviewer", "branch_updated"] => "The PR was behind its base and was updated; review the new head",
+      ["reviewer", "author_changes"] => "Changes requested on a PR ghwatch only reviews; its author makes them",
+      ["test_judge", "author_changes"] => "The problem remains on a PR ghwatch only reviews; its author fixes it",
       ["reviewer", "merge"] => "Approved; with `auto_merge` off a person merges",
       ["reviewer", "comment"] => "Non-blocking; the same head is not reviewed again until something changes",
       ["reviewer", "already_reviewed"] => "Nothing changed since the last review of this head",
@@ -199,14 +205,16 @@ module Ghwatch
       }],
       ["conflict", "Conflict with the base", {
         worker: rule(nil, :run_now, guard: :new),
-        review: rule("changes_requested", :rework_conflict, :reset_review, :run_now),
-        checking: rule("changes_requested", :rework_conflict, :reset_review, :run_now),
-        merge: rule("changes_requested", :rework_conflict, :reset_review, :run_now)
+        review: rule("changes_requested", :rework_conflict, :reset_review, :run_now, guard: :worker_may_push),
+        checking: rule("changes_requested", :rework_conflict, :reset_review, :run_now, guard: :worker_may_push),
+        merge: rule("changes_requested", :rework_conflict, :reset_review, :run_now, guard: :worker_may_push)
       }],
       ["checks_failed", "Required checks failed", {
         worker: rule(nil, :run_now, guard: :new),
-        merge: rule(:rework_or_escalate, :rework_failed_checks, :count_rework, :reset_review, :run_now, guard: :new_head),
-        wait_work: rule(:rework_or_escalate, :clear_wait, :rework_failed_checks, :count_rework, :reset_review, :run_now, guard: :new_head)
+        merge: rule(:rework_or_escalate, :rework_failed_checks, :count_rework, :reset_review, :run_now,
+          guard: [:new_head, :worker_may_push]),
+        wait_work: rule(:rework_or_escalate, :clear_wait, :rework_failed_checks, :count_rework, :reset_review, :run_now,
+          guard: [:new_head, :worker_may_push])
       }],
       ["pushed", "Someone pushed to the PR", {
         worker: rule(nil, :run_now),
@@ -321,7 +329,7 @@ module Ghwatch
       target = case rule.to
       when nil then "unchanged"
       when String then "`#{rule.to}`"
-      when :resume then "the interrupted state"
+      when :resume then "the interrupted state (`waiting_for_review` for a worker state on a PR ghwatch only reviews)"
       when :finalizing_or_done then "`finalizing` (no issue: `done`)"
       when :implementing_or_done then "`implementing` (no issue: `done`)"
       when :continuing_or_keep then "`continuing` (no issue: unchanged)"
@@ -335,9 +343,10 @@ module Ghwatch
       when :current then "resumes the current state"
       else "resumes `#{rule.resume}`"
       end
-      guard = {new: "only when newly observed", new_head: "once per PR head",
-               changes_pr: "unless only the base was merged in"}[rule.guard]
-      [target, resume, *rule.effects.map { |effect| EFFECTS.fetch(effect) }, guard].compact.join("; ")
+      guards = {new: "only when newly observed", new_head: "once per PR head",
+                changes_pr: "unless only the base was merged in", worker_may_push: "not for PRs ghwatch only reviews"}
+      guard = Array(rule.guard).map { |each| guards.fetch(each) }
+      [target, resume, *rule.effects.map { |effect| EFFECTS.fetch(effect) }, *guard].compact.join("; ")
     end
 
     # One line per round in the order they happened, for agents and people.
@@ -362,10 +371,13 @@ module Ghwatch
     private
 
     def guard_holds?(task, guard, context)
+      return guard.all? { |each| guard_holds?(task, each, context) } if guard.is_a?(Array)
+
       case guard
       when :new then context.fetch(:new, true)
       when :new_head then task.metadata["failed_checks_head"] != context[:head]
       when :changes_pr then !same_changes?(task, context)
+      when :worker_may_push then !task.metadata["review_only"]
       else true
       end
     end
@@ -403,7 +415,10 @@ module Ghwatch
     def target(task, to, context)
       case to
       when nil, String then to
-      when :resume then task.metadata["resume_state"] || "implementing"
+      when :resume
+        resume = task.metadata["resume_state"] || "implementing"
+        # A worker never takes up a PR ghwatch only reviews.
+        (task.metadata["review_only"] && WORKER_STATES.include?(resume)) ? "waiting_for_review" : resume
       when :finalizing_or_done then (task.issue_number || task.worktree) ? "finalizing" : "done"
       when :implementing_or_done then task.issue_number ? "implementing" : "done"
       when :continuing_or_keep then task.issue_number ? "continuing" : nil

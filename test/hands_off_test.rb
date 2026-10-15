@@ -90,4 +90,18 @@ class HandsOffTest < Minitest::Test
       log: Ghwatch::Log.new(StringIO.new)).sync_all
     assert_equal [[370, nil], [380, nil]], synced
   end
+
+  def test_only_prs_someone_else_wrote_are_review_only
+    engine = Ghwatch::TaskEngine.allocate
+    engine.instance_variable_set(:@github, OpenStruct.new(viewer_login: "koshian"))
+    theirs = Ghwatch::Task.for_pr(395)
+    engine.send(:mark_review_only, theirs, {"author" => {"login" => "ainamori"}})
+    assert theirs.metadata["review_only"]
+    mine = Ghwatch::Task.for_pr(360)
+    engine.send(:mark_review_only, mine, {"author" => {"login" => "koshian"}})
+    assert_equal false, mine.metadata["review_only"]
+    ghwatch_task = Ghwatch::Task.for_issue(7, branch: "b", worktree: nil)
+    engine.send(:mark_review_only, ghwatch_task, {"author" => {"login" => "koshian"}})
+    refute ghwatch_task.metadata.key?("review_only"), "tasks ghwatch started are its own"
+  end
 end

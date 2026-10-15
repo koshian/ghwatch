@@ -120,7 +120,7 @@ module Ghwatch
         Task state: #{task.state}
         Related issue: #{task.issue_number || "none"}
         Pull request: #{task.pr_number}
-        #{rework_rounds(task)}
+        #{rework_rounds(task)}#{review_only_note(task)}
 
         Whether a person must test this change is your decision. The worker does not prepare
         test builds or test requests: when a person must test, start the test build, wait for
@@ -177,6 +177,13 @@ module Ghwatch
     end
 
     private
+
+    def review_only_note(task)
+      return "" unless task.metadata["review_only"]
+
+      "\nThis PR belongs to its author; ghwatch only reviews it and never changes it. Write\n" \
+        "changes_requested for the author: they make the changes and push, and the PR is reviewed again."
+    end
 
     # How many times the PR went back to the worker and why, so the agents
     # can tell when the rounds circle around one mechanism.

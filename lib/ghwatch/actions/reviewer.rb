@@ -178,6 +178,7 @@ module Ghwatch
         when "changes_requested"
           post_review_body(task, data.fetch("body"), outcome, kind: "changes-requested")
           task.last_review_signature = refreshed_review_signature(task, fallback: initial_signature)
+          return leave_to_author(task, pull_request, role) if task.metadata["review_only"]
         when "waiting_for_human_input"
           task.last_review_signature = initial_signature
           wait_for_human(task, data.fetch("body"), outcome, kind: "human-question", target: :pull_request)
@@ -207,6 +208,13 @@ module Ghwatch
         {rework: rework.slice("main_problem_solved", "simplify").merge("source" => source, "summary" => summary)}
       end
 
+      # Someone else's PR: its author makes the changes. The review is not
+      # repeated for this head until they push or comment.
+      def leave_to_author(task, pull_request, role)
+        remember_comment(task, pull_request)
+        decide(task, role, "author_changes")
+      end
+
       def tested_changes?(task, pull_request)
         tested = task.metadata["human_test_head"]
         head = pull_request["headRefOid"]
@@ -227,6 +235,7 @@ module Ghwatch
           task.last_review_signature = refreshed_review_signature(task, fallback: @github.review_signature(pull_request))
         when "problem"
           post_review_body(task, data.fetch("body"), outcome, kind: "changes-requested")
+          return leave_to_author(task, pull_request, "test_judge") if task.metadata["review_only"]
         when "incomplete"
           message = data["reporter_message"].to_s.strip.empty? ? data.fetch("body") : data["reporter_message"]
           wait_for_human(task, message, outcome, kind: "human-test", target: task.issue_number ? :issue : :pull_request)

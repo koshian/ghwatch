@@ -540,6 +540,12 @@ When `review_all_open_prs = true`, ghwatch also creates review tasks for open no
 requests that were not created by one of its own issue tasks. This lets Dependabot or
 human-created PRs use the same review pipeline.
 
+A PR written by someone other than the account ghwatch works as is only reviewed: its
+branch is its author's. Changes the review or a test asks for are posted for the author and
+the PR waits for them to push or comment; conflicts and failed checks are theirs to fix
+too, and an answer to a question goes back to the reviewer, never to the worker. A PR
+opened by hand from ghwatch's own account is reworked by the worker as usual.
+
 Review agents are instructed to be read-only. ghwatch, rather than the reviewer process,
 performs comments and merges from the structured review result.
 

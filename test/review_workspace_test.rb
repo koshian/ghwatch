@@ -224,6 +224,26 @@ class ReviewWorkspaceTest < Minitest::Test
                    "main_problem_solved" => true, "simplify" => "drop the draft restore"}], @task.metadata["rework_history"]
   end
 
+  def test_changes_on_someone_elses_pr_are_left_to_its_author
+    @task.metadata["review_only"] = true
+    @task.state = "waiting_for_review"
+    worktrees = Minitest::Mock.new
+    worktrees.expect(:prepare_review, "/review/pr-167") { |task, pr, **options| true }
+    worktrees.expect(:record_workspace_changes, nil) { |task, **options| true }
+    roles = Minitest::Mock.new
+    outcome = Ghwatch::RoleRunner::Outcome.new(success: true, role: "reviewer", runner: "test", model: "test",
+      data: {"status" => "changes_requested", "body" => "", "reason" => "missing test"}, error_kind: nil, error: nil, raw_output: "")
+    roles.expect(:run, outcome) do |role, **options|
+      assert_includes options.fetch(:context), "ghwatch only reviews it and never changes it"
+      true
+    end
+    reviewer_with(worktrees, roles).run(@task)
+    assert_equal "waiting_for_review", @task.state
+    refute @task.metadata.key?("rework_rounds"), "the author's changes are not ghwatch's rework rounds"
+    assert_equal @github.pull_request_data["headRefOid"], @task.metadata.dig("commented_review", "head"),
+      "the same head is not reviewed again until the author pushes or comments"
+  end
+
   def test_a_passed_test_of_the_reviewed_head_goes_to_merge_without_another_review
     posts = answered_test
     roles = judge_roles("passed", "Both Windows versions passed every step.") do |context|

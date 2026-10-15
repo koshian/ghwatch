@@ -126,6 +126,7 @@ module Ghwatch
 
     def reconcile(task)
       snapshot = TaskSnapshot.capture(task: task, github: @github)
+      mark_review_only(task, snapshot.pull_request)
       @machine.react(task, @observer.events(task, snapshot))
       release_for_human_wait(task) if task.waiting_for_human?
       # A review wait with nothing scheduled would never be looked at again;
@@ -142,6 +143,16 @@ module Ghwatch
       task.last_error = e.message
       task.schedule_retry(after: @config.retry_after)
       @state.save_task(task)
+    end
+
+    # A PR ghwatch did not open is only reviewed when someone else wrote it:
+    # their branch is theirs to change. ghwatch's own account may have opened
+    # it by hand, and then the worker reworks it as usual.
+    def mark_review_only(task, pull_request)
+      return unless task.metadata["external_pr"] && !task.metadata.key?("review_only")
+
+      author = pull_request&.dig("author", "login")
+      task.metadata["review_only"] = author != @github.viewer_login if author
     end
 
     # Pushes and comments made by the action itself are not news.
