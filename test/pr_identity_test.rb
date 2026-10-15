@@ -104,7 +104,7 @@ class PrIdentityTest < Minitest::Test
   def action_options
     {
       project: OpenStruct.new(root: "."), config: @config, state: @state, github: @github,
-      roles: nil, context_builder: nil, human_channel: @human_channel, issue_triage: nil
+      roles: nil, context_builder: nil, human_channel: @human_channel
     }
   end
 
@@ -158,9 +158,7 @@ class PrIdentityTest < Minitest::Test
   def test_reviewer_environment_request_waits_on_the_pr_and_reply_resumes_review
     create_pr
     @task.pr_number = 164
-    triage = Object.new
-    def triage.request! = nil
-    reviewer = Ghwatch::Actions::Reviewer.new(**action_options.merge(issue_triage: triage))
+    reviewer = Ghwatch::Actions::Reviewer.new(**action_options)
     body = "Install fontconfig and fonts-dejavu-core: sudo apt install fontconfig fonts-dejavu-core. Verify with fc-match, then reply on this PR."
     reviewer.send(:apply_result, @task, @github.pr, OpenStruct.new(
       data: {"status" => "waiting_for_human_input", "body" => body}, signature: "reviewer"
@@ -243,14 +241,12 @@ class PrIdentityTest < Minitest::Test
 
   def test_worker_human_test_proposal_is_persisted_and_reviewed_before_notifying_a_person
     create_pr
-    triage = Object.new
-    def triage.request! = nil
     preparation = {
       "commit" => "tested-sha", "verified" => ["automated checks passed"],
       "remaining" => ["native OS behavior"], "test_subject" => "build URL and startup instructions",
       "steps" => ["Enable the feature and check the expected result"]
     }
-    worker = Ghwatch::Actions::Worker.new(worktrees: nil, command: nil, **action_options.merge(issue_triage: triage))
+    worker = Ghwatch::Actions::Worker.new(worktrees: nil, command: nil, **action_options)
     outcome = OpenStruct.new(data: {
       "status" => "waiting_for_human_test", "pr" => 164,
       "question" => "Please test native OS behavior", "test_preparation" => preparation
@@ -270,7 +266,7 @@ class PrIdentityTest < Minitest::Test
     assert_includes context, "tested-sha"
     assert_includes context, "Please test native OS behavior"
 
-    reviewer = Ghwatch::Actions::Reviewer.new(**action_options.merge(issue_triage: triage))
+    reviewer = Ghwatch::Actions::Reviewer.new(**action_options)
     reviewer.send(:apply_result, restored, @github.pr, OpenStruct.new(
       data: {"status" => "changes_requested", "body" => "Prepare the required test build first"},
       signature: "reviewer"
@@ -289,9 +285,7 @@ class PrIdentityTest < Minitest::Test
     assert_raises(RuntimeError) { worker.send(:apply_result, @task, outcome) }
     assert_nil @task.pr_number
     @github.pr["headRefName"] = @task.branch
-    triage = Object.new
-    def triage.request! = nil
-    worker = Ghwatch::Actions::Worker.new(worktrees: nil, command: nil, **action_options.merge(issue_triage: triage))
+    worker = Ghwatch::Actions::Worker.new(worktrees: nil, command: nil, **action_options)
     worker.send(:apply_result, @task, outcome)
     assert_equal 164, @task.pr_number
     assert_equal "waiting_for_review", @task.state
@@ -311,9 +305,7 @@ class PrIdentityTest < Minitest::Test
   def test_review_test_request_mentions_reporter_on_the_issue_and_detects_issue_reply
     create_pr
     @task.pr_number = 164
-    triage = Object.new
-    def triage.request! = nil
-    reviewer = Ghwatch::Actions::Reviewer.new(**action_options.merge(issue_triage: triage))
+    reviewer = Ghwatch::Actions::Reviewer.new(**action_options)
     missing = OpenStruct.new(data: {"status" => "waiting_for_human_test", "body" => "## Good\nReview"}, signature: "reviewer")
     assert_raises(RuntimeError) { reviewer.send(:apply_result, @task, @github.pr, missing) }
     assert_empty @github.comments
@@ -358,9 +350,7 @@ class PrIdentityTest < Minitest::Test
   def test_non_blocking_review_comments_schedule_another_review
     create_pr
     @task.pr_number = 164
-    triage = Object.new
-    def triage.request! = nil
-    reviewer = Ghwatch::Actions::Reviewer.new(**action_options.merge(issue_triage: triage))
+    reviewer = Ghwatch::Actions::Reviewer.new(**action_options)
     @task.state = "waiting_for_review"
     reviewer.send(:apply_result, @task, @github.pr, OpenStruct.new(
       data: {"status" => "comment", "body" => "Wait for CI completion"}, signature: "reviewer"

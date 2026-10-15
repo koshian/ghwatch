@@ -7,17 +7,22 @@ require "stringio"
 class TriageScreeningTest < Minitest::Test
   class Github
     attr_accessor :issues, :merged_at
+    attr_reader :read
 
     def initialize(issues)
       @issues = issues.to_h { |issue| [issue["number"], issue] }
       @merged_at = nil
+      @read = []
     end
 
-    def open_issues = @issues.values.map { |issue| {"number" => issue["number"]} }
+    def open_issues = @issues.values.map { |issue| issue.slice("number", "updatedAt") }
 
-    def issue(number) = @issues.fetch(number)
+    def issue(number)
+      @read << number
+      @issues.fetch(number)
+    end
 
-    def issue_signature(issue) = "#{issue["number"]}:#{issue["body"]}"
+    def issue_content_signature(issue) = "#{issue["number"]}:#{issue["body"]}"
 
     def open_pull_requests = [{"number" => 172, "title" => "Start at login"}]
 
@@ -28,19 +33,23 @@ class TriageScreeningTest < Minitest::Test
 
   class State
     attr_reader :started
+    attr_accessor :tasks
 
     def initialize
       @assessments = {}
       @started = []
+      @tasks = []
     end
-
-    def tasks = []
 
     def assessment(number) = @assessments[number]
 
-    def save_assessment(number, status:, reason:, comment:, signature:, at: Time.now.to_i)
+    def save_assessment(number, status:, reason:, comment:, signature:, at: Time.now.to_i, issue_updated_at: nil)
       @assessments[number] = {status: status, reason: reason, comment: comment,
-                              issue_signature: signature, updated_at: at}
+                              issue_signature: signature, issue_updated_at: issue_updated_at, updated_at: at}
+    end
+
+    def touch_assessment(number, signature:, issue_updated_at:)
+      @assessments[number].merge!(issue_signature: signature, issue_updated_at: issue_updated_at)
     end
 
     def backdate(number, seconds) = @assessments[number][:updated_at] -= seconds
@@ -203,12 +212,17 @@ class TriageScreeningTest < Minitest::Test
   def test_unchanged_ready_issues_start_when_a_slot_opens
     roles = Roles.new { |numbers| {"selected_issues" => [], "assessments" => numbers.map { |n| {"issue" => n, "status" => "ready", "reason" => "clear"} }} }
     client = Client.new(1 => ["ready", 0.99], 2 => ["ready", 0.99], 3 => ["ready", 0.99])
+    [1, 2, 3].each do |number|
+      @state.save_assessment(number, status: "ready", reason: "clear", comment: nil, signature: @github.issue_content_signature(issue(number)))
+    end
     triage(roles, client).tap { |t| def t.available_worker_slots = 0 }.run
     assert_empty @state.started
+    assert_empty roles.calls, "with no worker free, issues are not looked at"
 
     triage(roles, client).tap { |t| def t.available_worker_slots = 2 }.run
     assert_equal [1, 2], @state.started
-    assert_equal 1, roles.calls.size
+    assert_empty roles.calls
+    assert_empty client.calls
   end
 
   def test_a_screening_failure_or_missing_key_sends_every_issue_to_the_llm
@@ -291,5 +305,37 @@ class TriageScreeningTest < Minitest::Test
     candidate = JSON.parse(roles.contexts.first[/Candidates:\n(.*)\z/m, 1]).first
     assert_equal [{"number" => 364, "kind" => "pull_request", "state" => "merged"}], candidate["referenced"]
     assert_includes roles.contexts.first, "a wait for a pull request that is merged"
+  end
+
+  def test_relabeling_does_not_make_an_issue_judged_again_and_a_quiet_list_reads_nothing
+    @github.issues = {1 => issue(1).merge("updatedAt" => "t1")}
+    client = Client.new(1 => ["skip", 0.95])
+    triage(Roles.new { |numbers| assessed(numbers) }, client).run
+    assert_equal [1], client.calls
+
+    # ghwatch labels the issue, which changes its updatedAt and nothing else.
+    @github.issues[1]["updatedAt"] = "t2"
+    @github.read.clear
+    triage(Roles.new { |numbers| assessed(numbers) }, client).run
+    assert_equal [1], client.calls, "not judged again"
+    assert_equal [1], @github.read
+    assert_equal "t2", @state.assessment(1)[:issue_updated_at]
+
+    @github.read.clear
+    triage(Roles.new { |numbers| assessed(numbers) }, client).run
+    assert_empty @github.read, "the list shows nothing changed, so the issue is not read"
+  end
+
+  def test_an_issue_still_open_after_its_task_finished_is_judged_again
+    @github.issues = {1 => issue(1).merge("updatedAt" => "t1")}
+    client = Client.new(1 => ["followup", 0.95])
+    triage(Roles.new { |numbers| assessed(numbers) }, client).run
+    @state.backdate(1, 10)
+    done = Ghwatch::Task.for_issue(1, branch: "b", worktree: nil)
+    done.state = "done"
+    done.metadata["state_since"] = Time.now.to_i - 5
+    @state.tasks = [done]
+    triage(Roles.new { |numbers| assessed(numbers) }, client).run
+    assert_equal [1, 1], client.calls, "reopened, or waiting for a person: judged again"
   end
 end

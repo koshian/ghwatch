@@ -6,7 +6,7 @@ require "minitest/mock"
 require "stringio"
 
 class SchedulingTest < Minitest::Test
-  def test_cycle_processes_prs_before_issue_triage_and_issue_actions
+  def test_cycle_looks_for_issues_once_everything_that_could_run_has_run
     engine = Minitest::Mock.new
     intake = Minitest::Mock.new
     triage = Minitest::Mock.new
@@ -17,19 +17,13 @@ class SchedulingTest < Minitest::Test
       events << options.fetch(:scope)
       true
     }
-    engine.expect(:run_due, nil) { |**options|
-      events << options.fetch(:scope)
-      true
-    }
-    triage.expect(:request_if_watched_issue_changed, nil) { events << :watch }
-    triage.expect(:due?, true)
     triage.expect(:run, nil) { events << :triage }
     scheduler = Ghwatch::Scheduler.new(
       task_engine: engine, review_intake: intake, issue_triage: triage,
       config: OpenStruct.new(reload_if_changed!: false), github: nil
     )
     scheduler.cycle
-    assert_equal %i[reconcile discover pull_requests watch triage all], events
+    assert_equal %i[reconcile discover all triage], events
     [engine, intake, triage].each(&:verify)
   end
 
@@ -91,20 +85,13 @@ class SchedulingTest < Minitest::Test
   end
 
   class Recheck
-    attr_reader :events, :waited
+    attr_reader :events
 
-    def initialize(triage_due: [false, false])
-      @events = []
-      @triage_due = triage_due
-    end
+    def initialize = @events = []
 
     def reconcile_all = @events << :reconcile
 
     def discover = @events << :discover
-
-    def request_if_watched_issue_changed = @events << :watch
-
-    def due? = @triage_due.shift
   end
 
   def pausing_scheduler(recheck)
@@ -119,7 +106,7 @@ class SchedulingTest < Minitest::Test
     recheck = Recheck.new
     scheduler, waits = pausing_scheduler(recheck)
     scheduler.send(:pause, Time.now - Ghwatch::Scheduler::RECHECK_AFTER)
-    assert_equal %i[reconcile discover watch], recheck.events
+    assert_equal %i[reconcile discover], recheck.events
     assert_equal [600], waits, "found work is scheduled to run now, which ends the wait"
 
     recheck = Recheck.new
@@ -127,15 +114,5 @@ class SchedulingTest < Minitest::Test
     scheduler.send(:pause, Time.now)
     assert_empty recheck.events, "a short cycle has just looked"
     assert_equal [600], waits
-  end
-
-  def test_a_newly_changed_issue_starts_the_next_cycle_without_waiting
-    scheduler, waits = pausing_scheduler(Recheck.new(triage_due: [false, true]))
-    scheduler.send(:pause, Time.now - Ghwatch::Scheduler::RECHECK_AFTER)
-    assert_empty waits
-
-    scheduler, waits = pausing_scheduler(Recheck.new(triage_due: [true, true]))
-    scheduler.send(:pause, Time.now - Ghwatch::Scheduler::RECHECK_AFTER)
-    assert_equal [600], waits, "triage still due after a failed run waits as usual"
   end
 end

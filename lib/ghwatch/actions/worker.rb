@@ -129,7 +129,8 @@ module Ghwatch
             status: "deferred",
             reason: data["reason"].to_s,
             comment: nil,
-            signature: @github.issue_signature(issue)
+            signature: @github.issue_content_signature(issue),
+            issue_updated_at: issue["updatedAt"]
           )
         end
         decide(task, "worker", "deferred")

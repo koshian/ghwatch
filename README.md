@@ -483,11 +483,18 @@ The triage role classifies issues as:
 - `followup` — no new implementation now, but human verification or another response is worth watching
 - `skip` — not actionable for ghwatch
 
-Triage runs in up to three stages and skips work it has already done:
+Triage runs at the end of every poll, once everything that could run has run and what is
+left waits for CI or a person, and only while a worker slot is free: issues are looked for
+when a worker can take one. New, reopened and newly discussed issues are therefore picked
+up on the next idle poll. It runs in up to three stages and skips work it has already done:
 
 1. An issue unchanged since its last assessment is not judged again until
-   `triage.reassess_after` (default `1d`) has passed. A `deferred` issue is also judged
-   again after any PR merge, since that is usually what it waits for. An unchanged
+   `triage.reassess_after` (default `1d`) has passed. Unchanged means the same state,
+   title, body and comments; ghwatch relabeling an issue does not count, and an issue
+   whose `updatedAt` in the issue list is the one last seen is not read at all. An issue
+   that is still open after its task finished (reopened, or waiting for verification) is
+   judged again. A `deferred` issue is also judged again after any PR merge, since that
+   is usually what it waits for. An unchanged
    `ready` issue starts as soon as a worker slot opens. Issues that are ready start oldest
    (lowest number) first; the model decides which are ready, not the order.
 2. With `[triage.screening]` enabled, a decision model (TypeSafe Jev, `POST /v1/systemone`)
@@ -550,7 +557,6 @@ Run `ghwatch init` to get the exact current defaults. The main knobs are:
 ```toml
 [project]
 poll_interval = "10m"
-discovery_interval = "2h"
 retry_after = "10m"
 max_workers = 2
 candidate_limit = 20

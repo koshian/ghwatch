@@ -148,7 +148,6 @@ module Ghwatch
         roles: roles,
         context_builder: context_builder,
         human_channel: human_channel,
-        issue_triage: issue_triage,
         log: log
       }
       worker_action = Actions::Worker.new(worktrees: worktrees, command: command, **shared_action_dependencies)

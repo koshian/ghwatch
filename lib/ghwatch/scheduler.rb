@@ -49,10 +49,10 @@ module Ghwatch
         -> { @status_labels&.sync_all },
         -> { @task_engine.reconcile_all },
         -> { @review_intake.discover },
-        -> { @task_engine.run_due(scope: :pull_requests, stop_requested: -> { !@running }) },
-        -> { @issue_triage.request_if_watched_issue_changed },
-        -> { @issue_triage.run if @issue_triage.due? },
-        -> { @task_engine.run_due(scope: :all, stop_requested: -> { !@running }) }
+        -> { @task_engine.run_due(scope: :all, stop_requested: -> { !@running }) },
+        # Everything that could run has run; what is left waits for CI or a
+        # person. Look for issues now, while a worker can take one.
+        -> { @issue_triage.run }
       ]
       steps.each do |step|
         break unless @running
@@ -70,29 +70,23 @@ module Ghwatch
     def pause(cycle_started)
       return unless @running
 
-      triage_requested = Time.now - cycle_started >= RECHECK_AFTER && recheck
-      wait(@config.poll_interval) if @running && !triage_requested
+      recheck if Time.now - cycle_started >= RECHECK_AFTER
+      wait(@config.poll_interval) if @running
     end
 
     # What a cycle's first steps found, looked at again. Whatever needs work
-    # is scheduled to run now, so the wait that follows ends at once. Returns
-    # whether a changed issue asked for triage; one still due after a failed
-    # run does not count, or the loop would retry it without pause.
+    # is scheduled to run now, so the wait that follows ends at once.
     def recheck
-      triage_was_due = @issue_triage.due?
       [
         -> { @task_engine.reconcile_all },
-        -> { @review_intake.discover },
-        -> { @issue_triage.request_if_watched_issue_changed }
+        -> { @review_intake.discover }
       ].each do |step|
         break unless @running
 
         step.call
       end
-      !triage_was_due && @issue_triage.due?
     rescue => e
       @log.error("recheck failed: #{e.class}: #{e.message}")
-      false
     end
 
     def reload_config_if_changed

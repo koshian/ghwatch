@@ -13,60 +13,42 @@ module Ghwatch
       @context_builder = context_builder
       @log = log
       @screening = screening || IssueScreening.new(config: config, log: log)
-      @force = true
     end
 
-    def due?
-      return true if @force
-
-      last = @state.setting("last_discovery_at").to_i
-      Time.now.to_i - last >= @config.discovery_interval
-    end
-
-    def request!
-      @force = true
-      @state.set_setting("last_discovery_at", 0)
-    end
-
-    def request_if_watched_issue_changed
-      watched_assessments.each do |number, assessment|
-        issue = @github.issue(number)
-        # Triage only reads open issues, so a closed one's assessment would
-        # never catch up and would ask for triage on every cycle.
-        if issue["state"].to_s.casecmp?("closed")
-          @state.delete_assessment(number)
-          @log.info("[issue-#{number}] closed; forgetting its #{assessment[:status]} assessment")
-          next
-        end
-        next if @github.issue_signature(issue) == assessment[:issue_signature]
-
-        @log.info("[issue-#{number}] discussion changed; scheduling triage")
-        request!
-        break
-      rescue => e
-        @log.warn("could not refresh watched issue ##{number}: #{e.message}")
-      end
-    end
-
+    # Runs whenever ghwatch has nothing else to do: issues are looked for
+    # when a worker can take one, and only those that changed since they
+    # were last judged reach a model.
     def run
+      available_slots = available_worker_slots
+      return if available_slots.zero?
+
       # Assessments are stamped with when the run started: a PR merged while
       # the model was thinking may not be in what it saw.
       @started_at = Time.now.to_i
       # The latest merge is read once per run; the triage object lives as
       # long as ghwatch does.
       remove_instance_variable(:@last_merged_at) if defined?(@last_merged_at)
+      @done_at = nil
       candidates = candidate_issues
-      if candidates.empty?
-        mark_complete
-        return
+      return if candidates.empty?
+
+      previous = candidates.to_h { |summary| [summary["number"], @state.assessment(summary["number"])] }
+      # The issue list says when each issue last changed; one unchanged since
+      # it was judged need not be read again.
+      quiet, maybe = candidates.partition do |summary|
+        assessment = previous[summary["number"]]
+        assessment && summary["updatedAt"] && assessment[:issue_updated_at] == summary["updatedAt"] &&
+          current?(summary["number"], assessment)
       end
+      details = maybe.map { |summary| @github.issue(summary["number"]) }
+      relabeled, changed = details.partition { |issue| unchanged?(issue, previous[issue["number"]]) }
+      relabeled.each do |issue|
+        @state.touch_assessment(issue["number"], signature: @github.issue_content_signature(issue), issue_updated_at: issue["updatedAt"])
+      end
+      unchanged = quiet.map { |summary| summary["number"] } + relabeled.map { |issue| issue["number"] }
+      return start_issues(ready_numbers(unchanged, previous).first(available_slots)) if changed.empty?
 
-      details = candidates.map { |summary| @github.issue(summary["number"]) }
-      available_slots = available_worker_slots
-      previous = details.to_h { |issue| [issue["number"], @state.assessment(issue["number"])] }
-
-      unchanged, changed = details.partition { |issue| unchanged?(issue, previous[issue["number"]]) }
-      @log.info("triage: #{unchanged.size} unchanged issue(s) kept as assessed") unless unchanged.empty?
+      @log.info("triage: #{changed.size} changed issue(s); #{unchanged.size} kept as assessed")
       references = IssueReferences.new(lookup: ->(number) { @github.reference(number) }, log: @log)
       changed = screen(changed, previous, references)
 
@@ -90,21 +72,39 @@ module Ghwatch
       # Issues already judged ready but not started for lack of a slot, and
       # the ones just selected, start oldest first; the model only decides
       # which are ready, not the order.
-      ready = unchanged.map { |issue| issue["number"] }.select { |number| previous[number]&.fetch(:status) == "ready" }
-      start_issues((ready + selected).uniq.sort.first(available_slots))
-      mark_complete
+      start_issues((ready_numbers(unchanged, previous) + selected).uniq.sort.first(available_slots))
     end
 
     private
 
     def unchanged?(issue, previous)
-      return false unless previous && previous[:issue_signature] == @github.issue_signature(issue)
-      return false if Time.now.to_i - previous[:updated_at].to_i >= @config.reassess_after
+      return false unless previous && previous[:issue_signature] == @github.issue_content_signature(issue)
+
+      current?(issue["number"], previous)
+    end
+
+    # Whether an assessment still holds for an issue that did not change.
+    def current?(number, previous)
+      assessed = previous[:updated_at].to_i
+      return false if Time.now.to_i - assessed >= @config.reassess_after
+      # Its task finished since, yet the issue is open: reopened, or waiting
+      # for a person to verify.
+      return false if done_at[number].to_i > assessed
       return true unless previous[:status] == "deferred"
 
       # What a deferred issue waits for is usually a merge elsewhere.
       merged_at = last_merged_at
-      merged_at.nil? || merged_at < previous[:updated_at].to_i
+      merged_at.nil? || merged_at < assessed
+    end
+
+    def done_at
+      @done_at ||= @state.tasks.select { |task| task.done? && task.issue_number }.each_with_object({}) do |task, times|
+        times[task.issue_number] = [times[task.issue_number].to_i, task.metadata["state_since"].to_i].max
+      end
+    end
+
+    def ready_numbers(numbers, previous)
+      numbers.select { |number| previous[number]&.fetch(:status) == "ready" }.sort
     end
 
     def last_merged_at
@@ -131,18 +131,12 @@ module Ghwatch
         prior = previous[number]
         reason = (prior && prior[:status] == decision[:status]) ? prior[:reason] : "settled by #{decision[:model]} screening"
         @state.save_assessment(number, status: decision[:status], reason: reason, comment: nil,
-          signature: @github.issue_signature(issue), at: assessed_at)
+          signature: @github.issue_content_signature(issue), at: assessed_at, issue_updated_at: issue["updatedAt"])
         true
       end
     end
 
     def assessed_at = @started_at || Time.now.to_i
-
-    def watched_assessments
-      @state.assessments.select do |_number, assessment|
-        %w[blocked discussion followup].include?(assessment[:status])
-      end
-    end
 
     def candidate_issues
       active_issue_numbers = @state.tasks.reject(&:done?).filter_map(&:issue_number)
@@ -191,8 +185,9 @@ module Ghwatch
           status: status,
           reason: reason,
           comment: comment,
-          signature: @github.issue_signature(issue),
-          at: assessed_at
+          signature: @github.issue_content_signature(issue),
+          at: assessed_at,
+          issue_updated_at: issue["updatedAt"]
         )
       end
     end
@@ -227,11 +222,6 @@ module Ghwatch
       @log.info("[#{task.id}] selected for implementation")
     rescue => e
       @log.error("could not start issue ##{number}: #{e.message}")
-    end
-
-    def mark_complete
-      @force = false
-      @state.set_setting("last_discovery_at", Time.now.to_i)
     end
   end
 end

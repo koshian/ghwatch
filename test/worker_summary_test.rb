@@ -27,7 +27,7 @@ class WorkerSummaryTest < Minitest::Test
     @worker = Ghwatch::Actions::Worker.new(
       worktrees: nil, command: Ghwatch::Command.new(log: Ghwatch::Log.new(StringIO.new)),
       project: OpenStruct.new(root: @repo), config: OpenStruct.new(retry_after: 60), state: nil,
-      github: @github, roles: nil, context_builder: nil, human_channel: nil, issue_triage: nil,
+      github: @github, roles: nil, context_builder: nil, human_channel: nil,
       log: Ghwatch::Log.new(StringIO.new)
     )
     @task = Ghwatch::Task.for_issue(219, branch: "b", worktree: @repo)

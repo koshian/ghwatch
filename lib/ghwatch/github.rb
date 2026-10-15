@@ -228,6 +228,17 @@ module Ghwatch
       )
     end
 
+    # What triage judges an issue by. Unlike issue_signature it leaves out
+    # updatedAt, which changes whenever ghwatch relabels the issue.
+    def issue_content_signature(issue)
+      digest(
+        "state" => issue["state"],
+        "title" => issue["title"],
+        "body" => issue["body"],
+        "comments" => normalized_comments(issue["comments"])
+      )
+    end
+
     def review_signature(pr)
       return nil unless pr
 

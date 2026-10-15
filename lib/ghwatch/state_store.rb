@@ -58,17 +58,16 @@ module Ghwatch
       row && deserialize_assessment(row)
     end
 
-    def delete_assessment(number)
-      @db[:issue_assessments].where(issue_number: number).delete
-    end
-
-    def save_assessment(number, status:, reason:, comment:, signature:, at: Time.now.to_i)
+    # issue_updated_at: the issue's updatedAt when it was read, so triage can
+    # tell from the issue list alone that nothing happened since.
+    def save_assessment(number, status:, reason:, comment:, signature:, at: Time.now.to_i, issue_updated_at: nil)
       row = {
         issue_number: number,
         status: status,
         reason: reason,
         comment: comment,
         issue_signature: signature,
+        issue_updated_at: issue_updated_at,
         updated_at: at
       }
 
@@ -79,6 +78,11 @@ module Ghwatch
       end
 
       @status_labels&.sync_assessment(number)
+    end
+
+    # The issue was read again and nothing triage judges by had changed.
+    def touch_assessment(number, signature:, issue_updated_at:)
+      @db[:issue_assessments].where(issue_number: number).update(issue_signature: signature, issue_updated_at: issue_updated_at)
     end
 
     def setting(key)
@@ -133,6 +137,10 @@ module Ghwatch
         Integer :updated_at, null: false
       end
 
+      unless @db[:issue_assessments].columns.include?(:issue_updated_at)
+        @db.alter_table(:issue_assessments) { add_column :issue_updated_at, String }
+      end
+
       @db.create_table?(:settings) do
         String :key, primary_key: true
         String :value, text: true
@@ -145,6 +153,7 @@ module Ghwatch
         reason: row[:reason],
         comment: row[:comment],
         issue_signature: row[:issue_signature],
+        issue_updated_at: row[:issue_updated_at],
         updated_at: row[:updated_at]
       }
     end

@@ -278,7 +278,7 @@ class PrWorkTest < Minitest::Test
     assert_equal ["issue-71"], events
   end
 
-  def test_scheduler_drains_retries_before_triage_and_checks_again_before_issue_work
+  def test_scheduler_drains_due_work_oldest_first_then_looks_for_issues
     now = Time.at(1_000)
     older = Ghwatch::Task.for_pr(164)
     older.state = "changes_requested"
@@ -301,8 +301,6 @@ class PrWorkTest < Minitest::Test
     intake = Object.new
     intake.define_singleton_method(:discover) {}
     triage = Object.new
-    triage.define_singleton_method(:request_if_watched_issue_changed) {}
-    triage.define_singleton_method(:due?) { true }
     triage.define_singleton_method(:run) do
       events << :triage
       now = Time.at(1_040)
@@ -312,8 +310,9 @@ class PrWorkTest < Minitest::Test
       config: OpenStruct.new(reload_if_changed!: false), github: nil
     )
     Time.stub(:now, -> { now }) { scheduler.cycle }
-    # After triage, issue #71 is older than PR #170.
-    assert_equal [174, 164, :triage, :issue, 170], events
+    # #164 came due while #174 ran; #170 is not due before triage and waits
+    # for the next cycle.
+    assert_equal [:issue, 174, 164, :triage], events
   end
 
   def test_a_comment_posted_while_the_agent_ran_answers_the_question_it_then_asked

@@ -43,7 +43,7 @@ class ReviewWorkspaceTest < Minitest::Test
     reviewer = Ghwatch::Actions::Reviewer.new(
       worktrees: worktrees, project: nil, config: @config, state: @state,
       github: @github, roles: roles, context_builder: Ghwatch::ContextBuilder.new(config: @config),
-      human_channel: nil, issue_triage: nil, log: Ghwatch::Log.new(StringIO.new)
+      human_channel: nil, log: Ghwatch::Log.new(StringIO.new)
     )
     reviewer.run(@task)
     assert_equal "waiting_for_review", @task.state
@@ -96,7 +96,7 @@ class ReviewWorkspaceTest < Minitest::Test
     reviewer = Ghwatch::Actions::Reviewer.new(
       worktrees: worktrees, project: nil, config: @config, state: @state,
       github: @github, roles: roles, context_builder: Ghwatch::ContextBuilder.new(config: @config),
-      human_channel: nil, issue_triage: nil, log: Ghwatch::Log.new(StringIO.new)
+      human_channel: nil, log: Ghwatch::Log.new(StringIO.new)
     )
     reviewer.run(@task)
     assert_equal "ready_to_merge", @task.state
@@ -202,7 +202,7 @@ class ReviewWorkspaceTest < Minitest::Test
     reviewer = Ghwatch::Actions::Reviewer.new(
       worktrees: worktrees, project: nil, config: @config, state: @state,
       github: @github, roles: roles, context_builder: Ghwatch::ContextBuilder.new(config: @config),
-      human_channel: nil, issue_triage: nil, log: Ghwatch::Log.new(log)
+      human_channel: nil, log: Ghwatch::Log.new(log)
     )
     reviewer.run(@task)
     assert_includes log.string, "[pr-167] deep_reviewer -> changes_requested: CI step fails on macOS\n"
@@ -319,7 +319,7 @@ class ReviewWorkspaceTest < Minitest::Test
     Ghwatch::Actions::Reviewer.new(
       worktrees: worktrees, project: OpenStruct.new(root: "/project"), config: @config, state: @state,
       github: @github, roles: roles, context_builder: Ghwatch::ContextBuilder.new(config: @config),
-      human_channel: human_channel, issue_triage: nil, log: Ghwatch::Log.new(StringIO.new)
+      human_channel: human_channel, log: Ghwatch::Log.new(StringIO.new)
     )
   end
 

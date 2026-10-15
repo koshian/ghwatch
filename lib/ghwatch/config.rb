@@ -82,10 +82,6 @@ module Ghwatch
       Duration.seconds(project.fetch("poll_interval", "10m"))
     end
 
-    def discovery_interval
-      Duration.seconds(project.fetch("discovery_interval", "2h"))
-    end
-
     def retry_after
       Duration.seconds(project.fetch("retry_after", "10m"))
     end

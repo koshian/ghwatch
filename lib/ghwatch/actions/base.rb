@@ -3,7 +3,7 @@
 module Ghwatch
   module Actions
     class Base
-      def initialize(project:, config:, state:, github:, roles:, context_builder:, human_channel:, issue_triage:, log: Log.new, machine: nil)
+      def initialize(project:, config:, state:, github:, roles:, context_builder:, human_channel:, log: Log.new, machine: nil)
         @project = project
         @config = config
         @state = state
@@ -11,7 +11,6 @@ module Ghwatch
         @roles = roles
         @context_builder = context_builder
         @human_channel = human_channel
-        @issue_triage = issue_triage
         @log = log
         @machine = machine
       end
@@ -21,7 +20,7 @@ module Ghwatch
       # Actions decide; the state machine changes the state.
       def machine
         @machine ||= StateMachine.new(github: @github, config: @config, worktrees: @worktrees,
-          issue_triage: @issue_triage, human_channel: @human_channel, log: @log)
+          human_channel: @human_channel, log: @log)
       end
 
       def decide(task, role, result, context = {})
@@ -56,7 +55,6 @@ module Ghwatch
       # Posts the question; the caller then reports the wait as its result.
       def wait_for_human(task, body, outcome, kind:, target: :issue)
         @human_channel.wait(task: task, body: body, outcome: outcome, kind: kind, target: target)
-        @issue_triage&.request!
       end
     end
   end

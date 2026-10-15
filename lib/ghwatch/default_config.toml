@@ -1,6 +1,5 @@
 [project]
 poll_interval = "10m"
-discovery_interval = "2h"
 retry_after = "10m"
 max_workers = 2
 candidate_limit = 20

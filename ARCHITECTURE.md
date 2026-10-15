@@ -199,12 +199,12 @@ the first one with a rule for the task's group is applied.
 
 | Result | Next state and effects | Notes |
 | --- | --- | --- |
-| `waiting_for_review` | `waiting_for_review`; forget the last review; run now; triage again | Human testing is the reviewer's decision; an older `waiting_for_human_test` result is treated alike |
+| `waiting_for_review` | `waiting_for_review`; forget the last review; run now | Human testing is the reviewer's decision; an older `waiting_for_human_test` result is treated alike |
 | `waiting_for_human_input` | `waiting_for_human_input`; resumes the current state; start waiting |  |
 | `continue` | `continuing` (after 3 in a row: ask a person, resuming `continuing`); count a `continue`; retry after `retry_after` |  |
 | `done` | `waiting_for_review`; run now | The PR is open |
 | `merged` | `finalizing` (no issue: `done`); run now | `done` reported and the PR is already merged |
-| `deferred` | `done`; remove worktrees; triage again | The issue's assessment becomes `deferred` |
+| `deferred` | `done`; remove worktrees | The issue's assessment becomes `deferred` |
 | `no_pr` | `continuing`; retry after `retry_after` | Ready or done reported, but no PR exists |
 | `no_change` | unchanged; retry after `retry_after` | `continue` without any change to the repository or the PR |
 | `failed` | unchanged; retry after `retry_after` |  |
@@ -243,7 +243,7 @@ the first one with a rule for the task's group is applied.
 | `pending` | unchanged; retry after `retry_after` | Checks still running, or GitHub has not computed mergeability |
 | `manual` | unchanged; retry after `retry_after` | `auto_merge` is off; wait for a person to merge |
 | `refused` | `waiting_for_human_input`; resumes `waiting_for_review`; start waiting | GitHub refused the merge; ask on the PR with the reason |
-| `merged` | `finalizing` (no issue: `done`); remove the review workspace; triage again; run now |  |
+| `merged` | `finalizing` (no issue: `done`); remove the review workspace; run now |  |
 
 **finalizer**
 
@@ -251,7 +251,7 @@ the first one with a rule for the task's group is applied.
 | --- | --- | --- |
 | `not_merged` | `waiting_for_review` (no PR: `continuing`); retry after `retry_after` | The PR is not merged after all |
 | `no_issue` | `done`; remove worktrees | A task without an issue has nothing to finish |
-| `done` | `done`; remove worktrees; triage again |  |
+| `done` | `done`; remove worktrees |  |
 | `waiting_for_human_input` | `waiting_for_human_input`; resumes `finalizing`; start waiting |  |
 | `waiting_for_human_test` | `waiting_for_human_test`; resumes `finalizing`; start waiting |  |
 | `retry` | unchanged; retry after `retry_after` |  |
@@ -332,7 +332,11 @@ work is chosen again before every single action (`TaskEngine#run_due`):
 So older work is finished before newer work is touched, and a reply or push on an older
 task is picked up after the current action instead of after a whole round of others.
 A task runs at most 6 actions in one call; after that it waits for the next poll. Triage,
-which starts new issues, runs on its own schedule between these rounds.
+which starts new issues, runs when this is over and only what waits for CI or a person is
+left, and only while a worker slot is free. Issues unchanged since they were judged are
+not read again or sent to a model, so an idle poll costs one issue listing.
+A poll that took over a minute looks at the tasks and open PRs again before waiting, so
+what happened while agents ran is not left for a whole poll interval.
 
 Two limits stop a task that does not converge from taking all the agent time; both ask a
 person instead (on the PR, or the issue without one), and both counts are reset when they

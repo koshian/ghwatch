@@ -70,7 +70,6 @@ module Ghwatch
       rework_conflict: "rework: conflict",
       rework_failed_checks: "rework: failed checks",
       rework_review: "rework: the latest review",
-      request_triage: "triage again",
       count_rework: "count a rework round",
       count_continue: "count a `continue`",
       reset_rounds: "reset the rework and `continue` counts"
@@ -78,12 +77,12 @@ module Ghwatch
 
     RESULTS = {
       "worker" => {
-        "waiting_for_review" => rule("waiting_for_review", :reset_review, :run_now, :request_triage),
+        "waiting_for_review" => rule("waiting_for_review", :reset_review, :run_now),
         "waiting_for_human_input" => rule("waiting_for_human_input", :start_wait, resume: :current),
         "continue" => rule(:continuing_or_escalate, :count_continue, :retry_later),
         "done" => rule("waiting_for_review", :run_now),
         "merged" => rule(:finalizing_or_done, :run_now),
-        "deferred" => rule("done", :cleanup, :request_triage),
+        "deferred" => rule("done", :cleanup),
         "no_pr" => rule("continuing", :retry_later),
         "no_change" => rule(nil, :retry_later),
         "failed" => rule(nil, :retry_later)
@@ -113,12 +112,12 @@ module Ghwatch
         "pending" => rule(nil, :retry_later),
         "manual" => rule(nil, :retry_later),
         "refused" => rule("waiting_for_human_input", :start_wait, resume: "waiting_for_review"),
-        "merged" => rule(:finalizing_or_done, :cleanup_review, :request_triage, :run_now)
+        "merged" => rule(:finalizing_or_done, :cleanup_review, :run_now)
       },
       "finalizer" => {
         "not_merged" => rule(:review_or_continuing, :retry_later),
         "no_issue" => rule("done", :cleanup),
-        "done" => rule("done", :cleanup, :request_triage),
+        "done" => rule("done", :cleanup),
         "waiting_for_human_input" => rule("waiting_for_human_input", :start_wait, resume: "finalizing"),
         "waiting_for_human_test" => rule("waiting_for_human_test", :start_wait, resume: "finalizing"),
         "retry" => rule(nil, :retry_later),
@@ -239,16 +238,15 @@ module Ghwatch
       REACTIONS.find { |name, _description, _rules| name == event }&.last&.fetch(group, nil)
     end
 
-    def initialize(github:, config:, worktrees: nil, issue_triage: nil, human_channel: nil, log: Log.new)
+    def initialize(github:, config:, worktrees: nil, human_channel: nil, log: Log.new)
       @github = github
       @config = config
       @worktrees = worktrees
-      @issue_triage = issue_triage
       @human_channel = human_channel
       @log = log
     end
 
-    attr_writer :worktrees, :issue_triage, :human_channel
+    attr_writer :worktrees, :human_channel
 
     # Applies what an action decided. Raises for a result the table does not
     # know, so a new result cannot slip through unhandled.
@@ -442,7 +440,6 @@ module Ghwatch
         task.metadata["failed_checks_head"] = context[:head]
         task.metadata["rework_reason"] = "Required CI checks failed on #{context[:head]}: #{Array(context[:failed]).join(", ")}. " \
           "Read their logs, fix the cause, test, and push updates to the existing PR."
-      when :request_triage then @issue_triage&.request!
       when :count_rework
         task.metadata["rework_rounds"] = task.metadata["rework_rounds"].to_i + 1
         record_rework(task, context)
