@@ -279,14 +279,20 @@ module Ghwatch
 
         #{START_MARKER}
         {
-          "status": "done|waiting_for_human_input|waiting_for_human_test|retry",
+          "status": "done|not_resolved|waiting_for_human_input|waiting_for_human_test|retry",
           "close_issue": true,
           "comment": "completion note, question, or test request",
           "reason": "short reason"
         }
         #{END_MARKER}
 
-        comment is posted on the issue.
+        comment is posted on the issue, for every status but retry.
+
+        not_resolved means the merged change does not resolve the issue, for example a person
+        reports that the problem still happens: comment tells them what their report showed
+        and that work continues. ghwatch then starts new work on the issue with a new pull
+        request. Use retry only when the issue's state cannot be checked right now; nothing
+        is posted for it, so never put a message for people in a retry.
 
         #{REPORTER_GUIDANCE}
       TEXT

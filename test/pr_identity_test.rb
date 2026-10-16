@@ -302,6 +302,23 @@ class PrIdentityTest < Minitest::Test
     assert_empty @github.comments
   end
 
+  def test_a_merge_that_did_not_resolve_the_issue_is_reported_and_ends_the_task_for_new_work
+    @github.pr = {"number" => 423, "headRefName" => @task.branch, "state" => "MERGED", "mergedAt" => "2026-10-16T08:00:00Z"}
+    @task.pr_number = 423
+    @task.state = "finalizing"
+    roles = Object.new
+    roles.define_singleton_method(:run) do |role, **options|
+      Ghwatch::RoleRunner::Outcome.new(success: true, role: "finalizer", runner: "test", model: "test",
+        data: {"status" => "not_resolved", "comment" => "Fast right-to-left drags still lose the first characters; work continues.",
+               "reason" => "reporter still sees it"},
+        error_kind: nil, error: nil, raw_output: "")
+    end
+    context_builder = Ghwatch::ContextBuilder.new(config: @config)
+    Ghwatch::Actions::Finalizer.new(worktrees: nil, **action_options.merge(roles: roles, context_builder: context_builder)).run(@task)
+    assert_equal [[:issue, 160, "Fast right-to-left drags still lose the first characters; work continues."]], @github.comments
+    assert_equal "done", @task.state, "triage judges the issue again and starts new work"
+  end
+
   def test_review_test_request_mentions_reporter_on_the_issue_and_detects_issue_reply
     create_pr
     @task.pr_number = 164

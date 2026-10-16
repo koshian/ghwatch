@@ -123,6 +123,7 @@ module Ghwatch
         "not_merged" => rule(:review_or_continuing, :retry_later),
         "no_issue" => rule("done", :cleanup),
         "done" => rule("done", :cleanup),
+        "not_resolved" => rule("done", :cleanup),
         "waiting_for_human_input" => rule("waiting_for_human_input", :start_wait, resume: "finalizing"),
         "waiting_for_human_test" => rule("waiting_for_human_test", :start_wait, resume: "finalizing"),
         "retry" => rule(nil, :retry_later),
@@ -153,6 +154,7 @@ module Ghwatch
       ["merge", "manual"] => "`auto_merge` is off; wait for a person to merge",
       ["merge", "refused"] => "GitHub refused the merge; ask on the PR with the reason",
       ["finalizer", "not_merged"] => "The PR is not merged after all",
+      ["finalizer", "not_resolved"] => "The merge did not resolve the issue; triage judges it again and new work starts with a new PR",
       ["finalizer", "no_issue"] => "A task without an issue has nothing to finish"
     }.freeze
 

@@ -92,7 +92,7 @@ class StateMachineTest < Minitest::Test
       "refused" => "waiting_for_human_input", "merged" => "finalizing"
     },
     "finalizer" => {
-      "not_merged" => "continuing", "no_issue" => "done", "done" => "done",
+      "not_merged" => "continuing", "no_issue" => "done", "done" => "done", "not_resolved" => "done",
       "waiting_for_human_input" => "waiting_for_human_input", "waiting_for_human_test" => "waiting_for_human_test",
       "retry" => "same", "failed" => "same"
     }

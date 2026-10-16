@@ -6,4 +6,5 @@ promised human verification is still outstanding.
 
 If completion is justified, produce a concise human-facing completion note and indicate
 whether the issue should be closed. If more human information or testing is still required,
-request it instead of closing the issue prematurely.
+request it instead of closing the issue prematurely. If the merged change turns out not to
+resolve the issue, report not_resolved so that new work starts on it.

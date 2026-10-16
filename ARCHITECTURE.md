@@ -254,6 +254,7 @@ the first one with a rule for the task's group is applied.
 | `not_merged` | `waiting_for_review` (no PR: `continuing`); retry after `retry_after` | The PR is not merged after all |
 | `no_issue` | `done`; remove worktrees | A task without an issue has nothing to finish |
 | `done` | `done`; remove worktrees |  |
+| `not_resolved` | `done`; remove worktrees | The merge did not resolve the issue; triage judges it again and new work starts with a new PR |
 | `waiting_for_human_input` | `waiting_for_human_input`; resumes `finalizing`; start waiting |  |
 | `waiting_for_human_test` | `waiting_for_human_test`; resumes `finalizing`; start waiting |  |
 | `retry` | unchanged; retry after `retry_after` |  |

@@ -49,6 +49,8 @@ module Ghwatch
         case data["status"]
         when "done"
           complete(task, snapshot, outcome, data)
+        when "not_resolved"
+          @github.post_issue_comment(task.issue_number, data.fetch("comment"), kind: "not-resolved", model_signature: outcome.signature)
         when "waiting_for_human_input"
           wait_for_human(task, data.fetch("comment"), outcome, kind: "human-question")
         when "waiting_for_human_test"
