@@ -90,6 +90,9 @@ module Ghwatch
       # Its task finished since, yet the issue is open: reopened, or waiting
       # for a person to verify.
       return false if done_at[number].to_i > assessed
+      # A blocked or discussion assessment without a question, saved before
+      # such answers were refused, is judged again.
+      return false if QUESTION_STATUSES.include?(previous[:status]) && previous[:comment].to_s.strip.empty?
       return true unless %w[deferred followup].include?(previous[:status])
 
       # What a deferred issue waits for is usually a merge or another issue
@@ -170,6 +173,13 @@ module Ghwatch
           status = "skip"
           reason = "harmful request skipped by configuration: #{reason}"
           comment = nil
+        end
+
+        # Waiting for an answer to nothing never ends; the issue is judged
+        # again next time instead.
+        if QUESTION_STATUSES.include?(status) && comment.to_s.strip.empty?
+          @log.warn("[issue-#{number}] triage marked it #{status} without a question; judging it again next time")
+          next
         end
 
         if status == "close"

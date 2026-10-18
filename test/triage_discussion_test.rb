@@ -62,6 +62,24 @@ class TriageDiscussionTest < Minitest::Test
     assert_equal "ready", @state.assessment(1)[:status]
   end
 
+  def test_a_blocked_answer_with_nothing_to_ask_is_not_kept
+    save({"issue" => 1, "status" => "blocked", "reason" => "the reporter answered", "comment" => nil})
+    assert_nil @state.assessment(1)
+    assert_empty @github.posted
+
+    save({"issue" => 1, "status" => "blocked", "reason" => "needs the OS", "comment" => "Which OS?"})
+    assert_equal "blocked", @state.assessment(1)[:status]
+  end
+
+  def test_a_kept_blocked_assessment_without_a_question_is_judged_again
+    triage = Ghwatch::IssueTriage.new(project: nil, config: OpenStruct.new(reassess_after: 86_400), state: @state,
+      github: @github, roles: nil, worktrees: nil, context_builder: nil, log: Ghwatch::Log.new(StringIO.new))
+    triage.instance_variable_set(:@done_at, {})
+    now = Time.now.to_i
+    refute triage.send(:current?, 1, {status: "blocked", comment: nil, updated_at: now})
+    assert triage.send(:current?, 1, {status: "blocked", comment: "Which OS?", updated_at: now})
+  end
+
   def test_harmful_requests_can_be_skipped_like_spam
     harmful = {"issue" => 7, "status" => "discussion", "concern" => "harmful",
                "reason" => "asks for hidden telemetry", "comment" => "This would collect data silently."}

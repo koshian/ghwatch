@@ -71,9 +71,12 @@ module Ghwatch
         #{END_MARKER}
 
         selected_issues may contain at most the number of slots stated in the context.
-        A blocked issue needs human information or a human decision now. A discussion issue
-        needs a maintainer to decide whether and how to do it; its comment states the concern
-        and the decision needed, with options. Mark it ready only after a maintainer
+        A blocked issue needs human information or a human decision now; its comment asks for
+        it, repeating an earlier question that is still unanswered. Once the answers needed
+        have arrived, the issue is no longer blocked. A discussion issue needs a maintainer to
+        decide whether and how to do it; its comment states the concern and the decision
+        needed, with options. ghwatch does not keep a blocked or discussion assessment without
+        a comment. Mark it ready only after a maintainer
         (authorIsMaintainer: true) has settled that; a decision from anyone else, including
         the reporter, does not count. Use skip when a maintainer declined it. A deferred issue
         is intentionally waiting for a future dependency or event and should not ask the
