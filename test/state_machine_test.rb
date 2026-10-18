@@ -89,7 +89,8 @@ class StateMachineTest < Minitest::Test
     },
     "merge" => {
       "pr_changed" => "waiting_for_review", "pending" => "same", "manual" => "same",
-      "refused" => "waiting_for_human_input", "merged" => "finalizing"
+      "refused" => "waiting_for_human_input", "checks_failed" => "waiting_for_human_input",
+      "merged" => "finalizing"
     },
     "finalizer" => {
       "not_merged" => "continuing", "no_issue" => "done", "done" => "done", "not_resolved" => "done",

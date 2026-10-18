@@ -307,6 +307,15 @@ module Ghwatch
       end
     end
 
+    # Reruns the failed jobs of each workflow run with a failed check.
+    def rerun_failed_checks(pr)
+      runs = Array(pr["statusCheckRollup"]).filter_map do |check|
+        conclusion = (check["conclusion"] || check["state"]).to_s.upcase
+        check["detailsUrl"].to_s[%r{/actions/runs/(\d+)}, 1] if FAILED_CONCLUSIONS.include?(conclusion)
+      end
+      runs.uniq.each { |run| gh("run", "rerun", run, "--failed") }
+    end
+
     def checks_pending?(pr)
       Array(pr["statusCheckRollup"]).any? { |check| check["status"].to_s.upcase != "COMPLETED" }
     end

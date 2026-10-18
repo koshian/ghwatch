@@ -245,6 +245,7 @@ the first one with a rule for the task's group is applied.
 | `pending` | unchanged; retry after `retry_after` | Checks still running, or GitHub has not computed mergeability |
 | `manual` | unchanged; retry after `retry_after` | `auto_merge` is off; wait for a person to merge |
 | `refused` | `waiting_for_human_input`; resumes `waiting_for_review`; start waiting | GitHub refused the merge; ask on the PR with the reason |
+| `checks_failed` | `waiting_for_human_input`; resumes `waiting_for_review`; start waiting | Checks failed again after ghwatch reran them once for this head; ask on the PR |
 | `merged` | `finalizing` (no issue: `done`); remove the review workspace; run now |  |
 
 **finalizer**

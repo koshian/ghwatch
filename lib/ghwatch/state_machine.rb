@@ -117,6 +117,7 @@ module Ghwatch
         "pending" => rule(nil, :retry_later),
         "manual" => rule(nil, :retry_later),
         "refused" => rule("waiting_for_human_input", :start_wait, resume: "waiting_for_review"),
+        "checks_failed" => rule("waiting_for_human_input", :start_wait, resume: "waiting_for_review"),
         "merged" => rule(:finalizing_or_done, :cleanup_review, :run_now)
       },
       "finalizer" => {
@@ -153,6 +154,7 @@ module Ghwatch
       ["merge", "pending"] => "Checks still running, or GitHub has not computed mergeability",
       ["merge", "manual"] => "`auto_merge` is off; wait for a person to merge",
       ["merge", "refused"] => "GitHub refused the merge; ask on the PR with the reason",
+      ["merge", "checks_failed"] => "Checks failed again after ghwatch reran them once for this head; ask on the PR",
       ["finalizer", "not_merged"] => "The PR is not merged after all",
       ["finalizer", "not_resolved"] => "The merge did not resolve the issue; triage judges it again and new work starts with a new PR",
       ["finalizer", "no_issue"] => "A task without an issue has nothing to finish"

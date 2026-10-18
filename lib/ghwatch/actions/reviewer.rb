@@ -91,6 +91,7 @@ module Ghwatch
         return "manual" unless @config.auto_merge?
 
         checks_ready = !@config.reviewer_requires_green_checks? || @github.checks_green?(pull_request)
+        return rerun_failed_checks(task, pull_request) if !checks_ready && checks_failed?(pull_request)
         return "pending" unless checks_ready && @github.mergeable?(pull_request)
 
         begin
@@ -102,6 +103,33 @@ module Ghwatch
         end
         task.last_error = nil
         "merged"
+      end
+
+      def checks_failed?(pull_request)
+        !@github.checks_pending?(pull_request) && !@github.failed_checks(pull_request).empty?
+      end
+
+      # The PR was approved with its checks failing: the worker found nothing
+      # in its changes to fix. The failed jobs are run once more, and a person
+      # is asked if they fail again.
+      def rerun_failed_checks(task, pull_request)
+        head = pull_request["headRefOid"]
+        failed = @github.failed_checks(pull_request).sort
+        if task.metadata["rerun_checks_head"] != head
+          @github.rerun_failed_checks(pull_request)
+          task.metadata["rerun_checks_head"] = head
+          @log.info("[#{task.id}] reran the failed checks of PR ##{task.pr_number}: #{failed.join(", ")}")
+          return "pending"
+        end
+
+        body = <<~TEXT
+          This PR was approved, but its required checks failed on #{head}, and failed again after ghwatch reran them: #{failed.join(", ")}.
+
+          Please look at the failures (fix them, rerun the checks, or merge by hand) and reply here; the PR will be reviewed again.
+        TEXT
+        outcome = Struct.new(:signature).new("ghwatch")
+        wait_for_human(task, body, outcome, kind: "human-question", target: :pull_request)
+        "checks_failed"
       end
 
       def ask_about_refused_merge(task, message)
