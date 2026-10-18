@@ -57,7 +57,6 @@ module Ghwatch
 
         #{START_MARKER}
         {
-          "selected_issues": [123],
           "assessments": [
             {
               "issue": 123,
@@ -70,7 +69,6 @@ module Ghwatch
         }
         #{END_MARKER}
 
-        selected_issues may contain at most the number of slots stated in the context.
         A blocked issue needs human information or a human decision now; its comment asks for
         it, repeating an earlier question that is still unanswered. Once the answers needed
         have arrived, the issue is no longer blocked. A discussion issue needs a maintainer to

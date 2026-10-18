@@ -52,11 +52,9 @@ module Ghwatch
       references = IssueReferences.new(lookup: ->(number) { @github.reference(number) }, log: @log)
       changed = screen(changed, previous, references)
 
-      selected = []
       unless changed.empty?
         context = @context_builder.triage(
           candidates: changed.map { |issue| issue.merge("referenced" => references.for(issue)) },
-          available_slots: available_slots,
           previous_assessments: changed.to_h { |issue| [issue["number"], previous[issue["number"]]] }
         )
         outcome = @roles.run("triage", context: context, cwd: @project.root)
@@ -66,13 +64,12 @@ module Ghwatch
         end
 
         save_assessments(outcome, changed, references)
-        selected = selected_issues(outcome)
       end
 
-      # Issues already judged ready but not started for lack of a slot, and
-      # the ones just selected, start oldest first; the model only decides
-      # which are ready, not the order.
-      start_issues((ready_numbers(unchanged, previous) + selected).uniq.sort.first(available_slots))
+      # Every ready issue starts while a worker is free, oldest first: the
+      # model only decides which are ready, not which or how many to take.
+      judged = (unchanged + changed.map { |issue| issue["number"] }).to_h { |number| [number, @state.assessment(number)] }
+      start_issues(ready_numbers(judged.keys, judged).first(available_slots))
     end
 
     private
@@ -233,13 +230,6 @@ module Ghwatch
       return false if comment.to_s.strip.empty?
 
       previous.nil? || previous[:reason] != reason || previous[:comment] != comment
-    end
-
-    def selected_issues(outcome)
-      assessments = Array(outcome.data["assessments"])
-      Array(outcome.data["selected_issues"]).map(&:to_i).uniq.select do |number|
-        assessments.any? { |item| item["issue"].to_i == number && item["status"] == "ready" }
-      end
     end
 
     def start_issues(numbers)

@@ -8,11 +8,9 @@ module Ghwatch
       @config = config
     end
 
-    def triage(candidates:, available_slots:, previous_assessments:)
+    def triage(candidates:, previous_assessments:)
       <<~TEXT
         You are triaging GitHub issues for autonomous work.
-
-        Available autonomous worker slots: #{available_slots}
 
         Assess every candidate independently. `ready` means enough is known to implement now.
         Do not mark an issue blocked merely because it is large; blocked is specifically for
