@@ -220,6 +220,10 @@ module Ghwatch
         Run available autonomous checks and preparation yourself. Use changes_requested
         for defects or test preparation that requires implementation changes, and
         waiting_for_human_input for environment setup requiring human intervention.
+        Preparation the issue or project asks for that needs commits or pushes you may not
+        make (for example screenshots published on a branch for a person to look at) is the
+        worker's: use changes_requested and say what to prepare. Never ask a person to do it
+        or to find someone who can.
         Do not waive a project requirement. Only request checks that actually require a person.
         For waiting_for_human_test, include test_preparation and make body a self-contained
         request with the tested commit, what was verified, what remains, how to obtain and

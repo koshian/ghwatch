@@ -21,6 +21,10 @@ starts test builds and writes the request; do not start test builds, wait for th
 test requests yourself. If you think something can only be checked by a person, say so in
 your result for the reviewer.
 
+Preparation the issue or the project asks for that needs commits or pushes is yours too, since
+the reviewer cannot make them: for example screenshots to publish on a branch so a person can
+look at them. Do it before handing the PR to review, and say in your result where it is.
+
 When a review sends the PR back, the context says which rework round this is and why the
 earlier rounds happened. From the second round on, check whether the points cluster on a
 mechanism this PR added to answer earlier review points, each fix exposing the next hole.
