@@ -45,7 +45,7 @@ module Ghwatch
         end
 
         task.clear_retry
-        apply_result(task, pull_request, outcome)
+        apply_result(task, pull_request, outcome, workspace: workspace)
         @state.save_task(task)
       end
 
@@ -239,7 +239,7 @@ module Ghwatch
         Array(pull_request["closingIssuesReferences"]).first&.fetch("number", nil)
       end
 
-      def apply_result(task, pull_request, outcome)
+      def apply_result(task, pull_request, outcome, workspace: nil)
         data = outcome.data
         initial_signature = @github.review_signature(pull_request)
         task.metadata.delete("commented_review")
@@ -257,6 +257,9 @@ module Ghwatch
           task.last_review_signature = initial_signature
           wait_for_human(task, data.fetch("body"), outcome, kind: "human-question", target: :pull_request)
         when "waiting_for_human_test"
+          data = with_screenshots(task, data, workspace)
+          return decide(task, role, "failed") unless data
+
           task.last_review_signature = initial_signature
           task.metadata["human_test_head"] = pull_request["headRefOid"]
           ask_for_human_test(task, data, outcome)
@@ -319,6 +322,31 @@ module Ghwatch
           raise "unknown test result status #{data["status"].inspect}"
         end
         decide(task, "test_judge", data["status"], rework_context(data, "test"))
+      end
+
+      # The reviewer's screenshots, published and shown under the request. A
+      # request to judge by looking that has nothing to look at is not sent:
+      # the review runs again.
+      def with_screenshots(task, data, workspace)
+        screenshots = Array(data["screenshots"])
+        needed = data["human_check"] == "screenshots"
+        raise WorktreeManager::ScreenshotError, "a screenshot check came without screenshots" if needed && screenshots.empty?
+        return data if screenshots.empty?
+
+        published = @worktrees.publish_screenshots(task, workspace, screenshots)
+        gallery = published.each_with_index.map do |screenshot, index|
+          "**#{index + 1}. #{screenshot[:caption]}**\n\n![#{screenshot[:caption]}](#{screenshot[:url]})"
+        end.join("\n\n")
+        data.merge(%w[body reporter_message].filter_map { |key| [key, "#{data[key].to_s.rstrip}\n\n#{gallery}"] unless data[key].to_s.strip.empty? }.to_h)
+      rescue WorktreeManager::ScreenshotError, RuntimeError => e
+        unless needed
+          @log.warn("[#{task.id}] could not publish the screenshots: #{e.message}; asking without them")
+          return data
+        end
+
+        task.last_error = "screenshots could not be shown: #{e.message}"
+        @log.warn("[#{task.id}] #{task.last_error}; reviewing again")
+        nil
       end
 
       # The review stays on the PR; the reporter gets a request written for

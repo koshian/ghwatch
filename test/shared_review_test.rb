@@ -18,8 +18,9 @@ class SharedReviewTest < Minitest::Test
     git("push", "-q", "origin", "master")
     @manager = Ghwatch::WorktreeManager.new(
       project: Ghwatch::Project.new(root: @root, git_dir: @root.join(".git")),
-      config: OpenStruct.new(worktree_root: ".worktrees", branch_prefix: "ghwatch/issue-"),
-      github: OpenStruct.new(default_branch: "master"), command: Ghwatch::Command.new, log: Ghwatch::Log.new(StringIO.new)
+      config: OpenStruct.new(worktree_root: ".worktrees", branch_prefix: "ghwatch/issue-", screenshot_branch_prefix: "issue-assets/"),
+      github: OpenStruct.new(default_branch: "master", repo_name: "owner/project"), command: Ghwatch::Command.new,
+      log: Ghwatch::Log.new(StringIO.new)
     )
     branch, worktree = @manager.prepare(160)
     @path = Pathname(worktree)
@@ -187,5 +188,77 @@ class SharedReviewTest < Minitest::Test
     assert_equal "waiting_for_human_input", @task.state
     assert_equal "waiting_for_review", @task.metadata["resume_state"]
     assert_includes asked.last, "Mine"
+  end
+
+  # A reviewer whose run returns data, recording what it posts and asks.
+  def reviewer_returning(data)
+    @posted = []
+    @asked = []
+    posted = @posted
+    asked = @asked
+    human = Object.new
+    human.define_singleton_method(:wait) { |task:, body:, target:, **| asked << [target, body] }
+    roles = Object.new
+    roles.define_singleton_method(:run) do |role, context:, cwd:, task:|
+      Pathname(cwd).join("target/shots").mkpath
+      Pathname(cwd).join("target/shots/dark.png").write("png")
+      Pathname(cwd).join("light.png").write("png")
+      Ghwatch::RoleRunner::Outcome.new(success: true, role: role, runner: "t", model: "t", data: data,
+        error_kind: nil, error: nil, raw_output: "")
+    end
+    github = Object.new
+    pr = @pr.merge("state" => "OPEN", "headRefName" => "ghwatch/issue-160")
+    github.define_singleton_method(:pull_request) { |number| pr }
+    %i[issue_signature pr_signature review_signature].each { |name| github.define_singleton_method(name) { |*| "s" } }
+    github.define_singleton_method(:issue) { |number| {"number" => number, "state" => "OPEN", "comments" => []} }
+    github.define_singleton_method(:post_pr_comment) { |number, body, **options| posted << body }
+    config = OpenStruct.new(retry_after: 60, update_pr_branches?: false)
+    @task.state = "waiting_for_review"
+    Ghwatch::Actions::Reviewer.new(worktrees: @manager, project: OpenStruct.new(root: @root), config: config,
+      state: @state, github: github, roles: roles, context_builder: Ghwatch::ContextBuilder.new(config: config),
+      human_channel: human, log: Ghwatch::Log.new(StringIO.new))
+  end
+
+  def screenshot_check(**changes)
+    {"status" => "waiting_for_human_test", "human_check" => "screenshots", "body" => "Look at 1 and 2.",
+     "reporter_message" => "Please look at screenshots 1 and 2.",
+     "screenshots" => [{"path" => "target/shots/dark.png", "caption" => "Dark menu"},
+       {"path" => "light.png", "caption" => "Light menu"}]}.merge(changes)
+  end
+
+  def test_screenshots_to_look_at_are_published_and_shown_in_the_request
+    reviewer_returning(screenshot_check).run(@task)
+    assert_equal "waiting_for_human_test", @task.state
+    target, message = @asked.last
+    assert_equal :issue, target
+    commit = message[%r{blob/(\h{40})/}, 1]
+    assert commit, message
+    assert_includes message, "**1. Dark menu**"
+    assert_includes message, "![Light menu](https://github.com/owner/project/blob/#{commit}/02-light.png?raw=true)"
+    assert_includes @posted.last, "01-dark.png"
+    branch = git("ls-remote", "--heads", @origin.to_s, "issue-assets/*").split.last
+    assert_match %r{\Arefs/heads/issue-assets/issue-160-}, branch
+    assert_equal %w[01-dark.png 02-light.png], git("ls-tree", "--name-only", commit).split
+    refute @path.join("light.png").exist?, "moved out of the worktree, yet still published"
+  end
+
+  def test_a_screenshot_check_with_nothing_to_show_is_reviewed_again
+    [screenshot_check("screenshots" => []),
+      screenshot_check("screenshots" => [{"path" => "../outside.png", "caption" => "x"}]),
+      screenshot_check("screenshots" => [{"path" => "file.txt", "caption" => "x"}])].each do |data|
+      reviewer_returning(data).run(@task)
+      assert_equal "waiting_for_review", @task.state
+      assert_match(/screenshots could not be shown/, @task.last_error)
+      assert @task.retry_at
+      assert_empty @asked
+      assert_empty @posted
+    end
+  end
+
+  def test_a_run_check_is_asked_even_when_its_screenshots_cannot_be_published
+    data = screenshot_check("human_check" => "run", "screenshots" => [{"path" => "missing.png", "caption" => "x"}])
+    reviewer_returning(data).run(@task)
+    assert_equal "waiting_for_human_test", @task.state
+    assert_equal "Please look at screenshots 1 and 2.", @asked.last.last
   end
 end

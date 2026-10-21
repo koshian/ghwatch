@@ -160,6 +160,12 @@ module Ghwatch
       "en"
     end
 
+    # Where reviewers' screenshots are published, one new branch each time;
+    # empty to publish none.
+    def screenshot_branch_prefix
+      github.fetch("screenshot_branch_prefix", "ghwatch-assets/")
+    end
+
     def close_issue_after_merge?
       github.fetch("close_issue_after_merge", true)
     end
@@ -220,6 +226,7 @@ module Ghwatch
       reassess_after
       confidence = screening.fetch("min_confidence", 0.8)
       raise Error, "[triage.screening].min_confidence must be between 0 and 1" unless confidence.is_a?(Numeric) && confidence.between?(0, 1)
+      raise Error, "[github].screenshot_branch_prefix must be a string" unless screenshot_branch_prefix.is_a?(String)
       language = github.fetch("human_language", "auto")
       unless language.is_a?(String) && !language.strip.empty?
         raise Error, "[github].human_language must be a non-empty language name, language tag, or auto"

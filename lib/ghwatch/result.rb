@@ -166,6 +166,8 @@ module Ghwatch
           "status": "merge|changes_requested|waiting_for_human_input|waiting_for_human_test|comment#{deep_option}|retry",
           "body": "human-facing review in the form the role instructions describe",
           "reporter_message": "for waiting_for_human_test with a related issue: the request to the reporter",
+          "human_check": "for waiting_for_human_test: screenshots or run",
+          "screenshots": [{"path": "image file in the workspace", "caption": "what it shows, for the person"}],
           "issue": 123,
           "test_preparation": {
             "commit": "full tested commit SHA",
@@ -233,10 +235,18 @@ module Ghwatch
         person's answer asks ghwatch to do a check itself (try it under Xvfb, take
         screenshots), do it and report what you saw; do not ask them for it again. If they
         need to see the screenshots, have the worker publish them (changes_requested).
+        Choose how the person checks. human_check screenshots: what is left is only a
+        judgment of how it looks (order, colours, position, greyed-out state) that a person
+        can make from images; take the screenshots under Xvfb and list them in screenshots,
+        and do not ask for a test build or say how to start one. human_check run: the person
+        has to run it (real hardware, IME, HiDPI, their own setup); screenshots may still
+        show what to expect. ghwatch publishes the screenshots and appends them, numbered in
+        order, to body and reporter_message, so refer to them by number and say what to look
+        at in each. Keep secrets (passwords, tokens, private server names) out of them.
         For waiting_for_human_test, include test_preparation and make body a self-contained
         request with the tested commit, what was verified, what remains, how to obtain and
-        start the test subject, and steps with expected results. Explain when no artifact
-        is needed. Include the PR URL and direct build/artifact links when applicable.
+        start the test subject (not for a screenshot check), and steps with expected results.
+        Explain when no artifact is needed. Include the PR URL and direct build/artifact links when applicable.
         ghwatch posts this request on the source Issue and mentions its reporter; ask for
         results on that Issue. PR-only tasks use the PR conversation. Environment setup
         requests (waiting_for_human_input) continue to ask for a reply on the PR.

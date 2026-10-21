@@ -7,6 +7,10 @@ require "time"
 module Ghwatch
   class WorktreeManager
     WORKSPACE_CHANGE_RECORDS = 5
+    SCREENSHOT_TYPES = %w[.png .jpg .jpeg .gif .webp].freeze
+    SCREENSHOT_LIMIT = 10 * 1024 * 1024
+
+    class ScreenshotError < StandardError; end
 
     def initialize(project:, config:, github:, command:, log: Log.new)
       @project = project
@@ -311,6 +315,33 @@ module Ghwatch
       true
     end
 
+    # Publishes a reviewer's screenshots for a person to look at: one commit
+    # with only the images, on a new branch, made without touching any
+    # worktree. Returns each caption with a link fixed to that commit.
+    def publish_screenshots(task, workspace, screenshots)
+      prefix = @config.screenshot_branch_prefix
+      raise ScreenshotError, "publishing screenshots is turned off ([github].screenshot_branch_prefix)" if prefix.to_s.empty?
+
+      entries = Array(screenshots).each_with_index.map do |screenshot, index|
+        file = screenshot_file(task, workspace, screenshot["path"].to_s)
+        name = format("%02d-%s", index + 1, File.basename(file).gsub(/[^\w.-]/, "_"))
+        blob = git("hash-object", "-w", file.to_s).strip
+        {name: name, blob: blob, caption: screenshot["caption"].to_s}
+      end
+      raise ScreenshotError, "no screenshots were given" if entries.empty?
+
+      tree = git_result("mktree", stdin: entries.map { |entry| "100644 blob #{entry[:blob]}\t#{entry[:name]}\n" }.join)
+      raise ScreenshotError, "git mktree failed: #{tree.text.strip}" unless tree.success?
+
+      commit = git("commit-tree", tree.stdout.strip, "-m", "Screenshots for #{task.pr_number ? "PR ##{task.pr_number}" : task.id}").strip
+      branch = "#{prefix}#{task.id}-#{Time.now.utc.strftime("%Y%m%d%H%M%S")}"
+      git("push", "origin", "#{commit}:refs/heads/#{branch}")
+      @log.info("[#{task.id}] published #{entries.size} screenshot(s) on #{branch}")
+      entries.map do |entry|
+        {caption: entry[:caption], url: "https://github.com/#{@github.repo_name}/blob/#{commit}/#{entry[:name]}?raw=true"}
+      end
+    end
+
     def prepare_pull_request(task, pull_request, state:)
       raise "cannot prepare a PR without its head repository" unless pull_request.dig("headRepository", "nameWithOwner")
 
@@ -349,6 +380,24 @@ module Ghwatch
     def task_worktree(task)
       path = task.worktree && Pathname(task.worktree)
       path if path&.exist? && registered_worktree?(path)
+    end
+
+    # A screenshot inside the review workspace, or moved out of the task
+    # worktree after the review (see #end_shared_review).
+    def screenshot_file(task, workspace, path)
+      root = Pathname(workspace).realpath
+      relative = Pathname(path).absolute? ? Pathname(path).expand_path.relative_path_from(root) : Pathname(path)
+      raise ScreenshotError, "screenshot #{path} is outside the review workspace" if relative.each_filename.first == ".."
+
+      kept = Array(task.metadata["shared_review_changes"]).last&.fetch("kept", nil)
+      file = [root.join(relative), kept && Pathname(kept).join("files", relative)].compact.find(&:file?)
+      raise ScreenshotError, "screenshot #{path} does not exist" unless file
+      allowed = [root, kept && Pathname(kept).realpath].compact.map { |dir| "#{dir}/" }
+      raise ScreenshotError, "screenshot #{path} is outside the review workspace" unless file.realpath.to_s.start_with?(*allowed)
+      raise ScreenshotError, "screenshot #{path} is not an image (#{SCREENSHOT_TYPES.join(", ")})" unless SCREENSHOT_TYPES.include?(file.extname.downcase)
+      raise ScreenshotError, "screenshot #{path} is larger than #{SCREENSHOT_LIMIT / 1024 / 1024} MiB" if file.size > SCREENSHOT_LIMIT
+
+      file
     end
 
     def ancestor?(path, ancestor, descendant)

@@ -22,6 +22,9 @@ update_pr_branches = true
 # Use a language name/tag (e.g. "ja") or infer it from the process environment.
 human_language = "auto"
 close_issue_after_merge = true
+# Reviewers' screenshots for a person to look at are published on a new branch
+# with this prefix and shown in the request; empty publishes none.
+screenshot_branch_prefix = "ghwatch-assets/"
 require_green_checks = true
 
 [triage]

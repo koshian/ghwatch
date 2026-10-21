@@ -461,6 +461,14 @@ with its reporter mentioned, PR and test-build links, the tested SHA, artifact/s
 instructions, and steps with expected results. Replies are monitored on that Issue.
 PR-only tasks use the PR conversation; existing waits retain their recorded reply channel.
 
+The reviewer chooses how a person checks. When only a judgment of how it looks is left, it
+asks them to look at screenshots it took under Xvfb instead of running a test build; when
+they have to run it, it asks as above. ghwatch publishes the reviewer's screenshots as one
+commit holding only the images, on a new branch named after `github.screenshot_branch_prefix`
+(default `ghwatch-assets/`; empty turns this off), and appends them, numbered and linked to
+that commit, to both the PR review and the request. A screenshot check whose screenshots
+cannot be published is not sent; the review runs again.
+
 Missing development-environment packages use reviewer `waiting_for_human_input` rather
 than worker rework or human testing. The PR request lists verified package names, their
 purpose, observed errors, a copyable apt installation command and verification steps.
@@ -611,6 +619,7 @@ merge_method = "merge"
 update_pr_branches = true
 human_language = "auto"
 close_issue_after_merge = true
+screenshot_branch_prefix = "ghwatch-assets/"
 require_green_checks = true
 ```
 
