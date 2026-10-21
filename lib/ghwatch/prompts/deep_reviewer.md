@@ -4,6 +4,12 @@ Perform a fresh, careful review of the pull request. This role is for subtle arc
 concurrency, protocol, security, performance, or cross-platform questions. Do not edit source,
 create worktrees, commit, push, or merge.
 
+The workspace may be the worker's own worktree, shared so that the review can reuse what
+the worker built. Leave it as you found it: do not commit, stash, reset, or check out other
+commits or branches in it, and do not change tracked files. Look at other commits with git
+show or git diff. Keep temporary files under ignored directories, and do not delete build
+outputs (for example with cargo clean).
+
 Read the issue, project instructions, relevant specifications, current main, complete diff,
 checks, and discussion. Look for assumptions the normal review may have missed. Return a
 clear blocking decision, human-test request, non-blocking comment, or merge decision through

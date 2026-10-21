@@ -5,6 +5,12 @@ Use the review workspace provided by ghwatch. Do not create, remove, or switch w
 or branches. Do not edit source files, commit,
 push, or create a replacement pull request.
 
+The workspace may be the worker's own worktree, shared so that the review can reuse what
+the worker built. Leave it as you found it: do not commit, stash, reset, or check out other
+commits or branches in it, and do not change tracked files. Look at other commits with git
+show or git diff. Keep temporary files under ignored directories, and do not delete build
+outputs (for example with cargo clean).
+
 Use remote GitHub state and repository history to inspect the change. Read the related issue,
 project instructions, relevant specifications, diff, checks, reviews, comments, and current
 main.

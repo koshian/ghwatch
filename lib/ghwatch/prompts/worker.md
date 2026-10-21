@@ -16,7 +16,9 @@ question through the ghwatch result protocol.
 
 Your job is the implementation. Verify it as a developer would with the project's own
 tools (formatter, linter, tests, build, and GUI checks under Xvfb where the project provides
-them), push, and hand it to review. The reviewer decides whether a person must test it,
+them), push, and hand it to review. Hand it over only when it could be merged as it is if
+the review finds nothing: everything that belongs in the PR is committed and pushed, and
+nothing that does not belong in it is committed. Temporary files may stay untracked. The reviewer decides whether a person must test it,
 starts test builds and writes the request; do not start test builds, wait for them, or write
 test requests yourself. If you think something can only be checked by a person, say so in
 your result for the reviewer.
