@@ -50,12 +50,17 @@ module Ghwatch
     # work it needs, so older work is finished before newer work is touched.
     # Age is the number of the issue a task came from (the PR's for an
     # external PR); GitHub numbers issues and PRs in one sequence.
-    def run_due(stop_requested: -> { false }, scope: :all)
+    # look_again runs with each of those looks, for what else GitHub may
+    # have (new PRs).
+    def run_due(stop_requested: -> { false }, scope: :all, look_again: -> {})
       raise ArgumentError, "unknown task scope #{scope.inspect}" unless %i[all pull_requests issues].include?(scope)
 
       actions = Hash.new(0)
       until stop_requested.call
-        reconcile_all if actions.any? && (@reconciled_at.nil? || Time.now - @reconciled_at >= RECONCILE_INTERVAL)
+        if actions.any? && (@reconciled_at.nil? || Time.now - @reconciled_at >= RECONCILE_INTERVAL)
+          reconcile_all
+          look_again.call
+        end
         task = active_tasks.select { |candidate| in_scope?(candidate, scope) && actions[candidate.id] < MAX_ACTIONS_PER_TASK && action_due?(candidate) }
           .min_by { |candidate| [age(candidate), candidate.id] }
         break unless task

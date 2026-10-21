@@ -49,13 +49,14 @@ module Ghwatch
         -> { @status_labels&.sync_all },
         -> { @task_engine.reconcile_all },
         -> { @review_intake.discover },
-        -> { @task_engine.run_due(scope: :all, stop_requested: -> { !@running }) },
+        # A new install takes over between actions, not only between cycles.
+        -> { @task_engine.run_due(scope: :all, stop_requested: -> { stopping? }, look_again: -> { discover_between_actions }) },
         # Everything that could run has run; what is left waits for CI or a
         # person. Look for issues now, while a worker can take one.
         -> { @issue_triage.run }
       ]
       steps.each do |step|
-        break unless @running
+        break if stopping?
 
         step.call
       end
@@ -87,6 +88,16 @@ module Ghwatch
       end
     rescue => e
       @log.error("recheck failed: #{e.class}: #{e.message}")
+    end
+
+    def stopping? = !@running || updated?
+
+    # New PRs are found while agents work through a long backlog, not only
+    # when the cycle starts.
+    def discover_between_actions
+      @review_intake.discover
+    rescue => e
+      @log.warn("could not look for new PRs: #{e.message}")
     end
 
     def reload_config_if_changed

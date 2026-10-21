@@ -63,6 +63,50 @@ class SchedulingTest < Minitest::Test
     worker.verify
   end
 
+  def test_new_prs_are_looked_for_with_the_periodic_look_between_actions
+    first = Ghwatch::Task.for_issue(1, branch: "issue-1", worktree: nil)
+    second = Ghwatch::Task.for_issue(2, branch: "issue-2", worktree: nil)
+    events = []
+    worker = Object.new
+    worker.define_singleton_method(:run) do |task|
+      events << task.id
+      task.transition_to("waiting_for_human_input")
+    end
+    github = Object.new
+    def github.issue(number) = {"number" => number, "state" => "OPEN", "comments" => []}
+    def github.issue_signature(issue) = "issue"
+    def github.pull_request_for_branch(branch, since: nil) = nil
+    engine = Ghwatch::TaskEngine.new(
+      state: Struct.new(:tasks) { def save_task(task) = task }.new([first, second]), github: github,
+      human_channel: nil, worker_action: worker, reviewer_action: nil,
+      finalizer_action: nil, config: OpenStruct.new(retry_after: 60), log: Ghwatch::Log.new(StringIO.new)
+    )
+    engine.run_due(look_again: -> { events << :look_again })
+    assert_equal ["issue-1", :look_again, "issue-2"], events
+  end
+
+  def test_a_new_install_takes_over_between_actions
+    update = OpenStruct.new(updated?: false)
+    answers = []
+    engine = Object.new
+    engine.define_singleton_method(:reconcile_all) {}
+    engine.define_singleton_method(:run_due) do |stop_requested:, **|
+      answers << stop_requested.call
+      update[:updated?] = true # installed while the first action ran
+      answers << stop_requested.call
+    end
+    triage = Object.new
+    def triage.run = raise("triage must wait for the new ghwatch")
+    scheduler = Ghwatch::Scheduler.new(
+      task_engine: engine, review_intake: OpenStruct.new(discover: nil), issue_triage: triage,
+      config: OpenStruct.new(reload_if_changed!: false), github: nil, log: Ghwatch::Log.new(log = StringIO.new),
+      self_update: update
+    )
+    scheduler.cycle
+    assert_equal [false, true], answers, "the next action is not started once a new ghwatch is installed"
+    refute_includes log.string, "cycle failed"
+  end
+
   def test_wait_wakes_at_retry_deadline_and_logs_next_check
     [[1_100, 100], [999, 1], [nil, 600]].each do |retry_at, expected|
       log = StringIO.new

@@ -136,7 +136,8 @@ ghwatch status
 When ghwatch runs from an installed gem, installing a new version (for example
 `rake install:user`) is enough: ghwatch notices the new files, waits until they stop
 changing, and restarts into the new version with the same arguments at the next point
-where no agent runs (between cycles, or within a minute while it waits). A run from a
+where no agent runs (between two actions, between cycles, or within a minute while it
+waits). A run from a
 source checkout does not restart itself.
 
 ## Durable state
@@ -381,6 +382,9 @@ done
 
 Only implementation/rework states consume `max_workers`. A task that already has a PR and is
 waiting for review does not block another issue from starting.
+
+Between actions, at most once a minute, ghwatch looks at its tasks on GitHub again and
+looks for new PRs, so a long backlog of agent work does not hide them until the cycle ends.
 
 Each cycle discovers and processes existing PR tasks before triaging issues and running
 tasks without a PR. PR rework, review, merging and finalization take precedence over new
