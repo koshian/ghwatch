@@ -37,4 +37,21 @@ class RunnerResultTest < Minitest::Test
     assert_equal "quota", invoke("quota exceeded").error_kind
     assert_equal "quota", invoke("quota exceeded\nGHWATCH_RESULT_BEGIN\ninvalid JSON\nGHWATCH_RESULT_END").error_kind
   end
+
+  def test_codex_runs_without_its_sandbox_unless_one_is_configured
+    argv = lambda do |settings|
+      seen = nil
+      command = Object.new
+      command.define_singleton_method(:run) do |*args, **options|
+        seen = args
+        Ghwatch::Command::Result.new(argv: args, stdout: "", stderr: "", exit_code: 0, timed_out: false)
+      end
+      Ghwatch::Runners::Codex.new(settings: {"command" => "codex"}.merge(settings), command: command)
+        .run(model: "gpt-6-luna", prompt: "p", cwd: ".", extra_args: ["--extra"])
+      seen
+    end
+    assert_equal %w[codex exec --model gpt-6-luna --dangerously-bypass-approvals-and-sandbox --color never --extra -], argv.call({})
+    assert_equal %w[codex exec --model gpt-6-luna --sandbox workspace-write --color never --extra -],
+      argv.call("sandbox" => "workspace-write")
+  end
 end

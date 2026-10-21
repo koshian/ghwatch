@@ -195,6 +195,7 @@ module Ghwatch
       "codex" => {
         "command" => "codex",
         "timeout" => "90m",
+        "sandbox" => "none",
         "capacity_patterns" => [
           "usage limit",
           "quota",
@@ -227,6 +228,9 @@ module Ghwatch
       confidence = screening.fetch("min_confidence", 0.8)
       raise Error, "[triage.screening].min_confidence must be between 0 and 1" unless confidence.is_a?(Numeric) && confidence.between?(0, 1)
       raise Error, "[github].screenshot_branch_prefix must be a string" unless screenshot_branch_prefix.is_a?(String)
+      unless Runners::Codex::SANDBOXES.include?(runner("codex")["sandbox"])
+        raise Error, "[runners.codex].sandbox must be one of #{Runners::Codex::SANDBOXES.join(", ")}"
+      end
       language = github.fetch("human_language", "auto")
       unless language.is_a?(String) && !language.strip.empty?
         raise Error, "[github].human_language must be a non-empty language name, language tag, or auto"

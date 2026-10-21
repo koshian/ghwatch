@@ -257,8 +257,8 @@ model = "gpt-5.6-luna"
 prompt = "reviewer.md"
 
 [[roles.reviewer.models]]
-runner = "opencode"
-model = "openai/gpt-6-luna"
+runner = "codex"
+model = "gpt-6-luna"
 ```
 
 The first worker is preferred. In this example Codex is used only when Claude reports a
@@ -281,6 +281,11 @@ Runner executable paths and timeouts can also be overridden:
 command = "claude"
 timeout = "90m"
 ```
+
+Agents build, test, push and call `gh`. Codex's own sandbox forbids the network and writes
+outside the working directory (where a worktree's Git data lives), so ghwatch runs Codex
+without it by default, as the other runners run. `[runners.codex] sandbox` chooses
+`read-only`, `workspace-write` or `danger-full-access` instead of `none`.
 
 ## Prompt overrides
 

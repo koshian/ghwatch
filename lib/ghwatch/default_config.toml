@@ -48,6 +48,10 @@ timeout = "90m"
 [runners.codex]
 command = "codex"
 timeout = "90m"
+# "none" runs agents without Codex's sandbox, which would block the network
+# and writes outside the worktree; or read-only, workspace-write,
+# danger-full-access.
+sandbox = "none"
 
 [runners.opencode]
 command = "opencode"
@@ -57,8 +61,8 @@ timeout = "90m"
 prompt = "triage.md"
 
 [[roles.triage.models]]
-runner = "opencode"
-model = "openai/gpt-6-luna"
+runner = "codex"
+model = "gpt-6-luna"
 fallback_on = ["capacity", "quota"]
 
 [[roles.triage.models]]
@@ -81,8 +85,8 @@ model = "gpt-5.6-luna"
 prompt = "reviewer.md"
 
 [[roles.reviewer.models]]
-runner = "opencode"
-model = "openai/gpt-6-luna"
+runner = "codex"
+model = "gpt-6-luna"
 fallback_on = ["capacity", "quota"]
 
 [[roles.reviewer.models]]
@@ -93,8 +97,8 @@ model = "sonnet"
 prompt = "deep_reviewer.md"
 
 [[roles.deep_reviewer.models]]
-runner = "opencode"
-model = "openai/gpt-6.1-sol"
+runner = "codex"
+model = "gpt-6.1-sol"
 fallback_on = ["capacity", "quota"]
 
 [[roles.deep_reviewer.models]]
@@ -105,8 +109,8 @@ model = "opus"
 prompt = "test_judge.md"
 
 [[roles.test_judge.models]]
-runner = "opencode"
-model = "openai/gpt-6-luna"
+runner = "codex"
+model = "gpt-6-luna"
 fallback_on = ["capacity", "quota"]
 
 [[roles.test_judge.models]]
