@@ -236,6 +236,7 @@ the first one with a rule for the task's group is applied.
 | `problem` | `changes_requested` (after 3 rounds: ask a person, resuming `changes_requested`); rework: the latest review; count a rework round; run now | The answer reports that the problem remains |
 | `author_changes` | `waiting_for_review`; retry after `retry_after` | The problem remains on a PR ghwatch only reviews; its author fixes it |
 | `incomplete` | `waiting_for_human_test`; resumes `checking_test_result`; start waiting | Part of the request is unanswered; ask for that part only |
+| `delegated` | `waiting_for_review`; forget the last review; run now | The person asked ghwatch to do the check itself; the reviewer does it, with their reply |
 | `pr_changed` | `waiting_for_review`; run now | The head is not the one the person tested; ghwatch checks this before the judge runs |
 | `retry` | unchanged; retry after `retry_after` |  |
 | `failed` | unchanged; retry after `retry_after` |  |

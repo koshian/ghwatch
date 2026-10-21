@@ -293,6 +293,18 @@ class ReviewWorkspaceTest < Minitest::Test
     assert_equal "checking_test_result", @task.metadata["resume_state"]
   end
 
+  def test_an_answer_asking_ghwatch_to_check_goes_back_to_the_reviewer_with_the_answer
+    answered_test
+    @task.metadata["human_answer"] = {"body" => "Please take the screenshots yourself and show me."}
+    @task.last_review_signature = "reviewed"
+    roles = judge_roles("delegated", "The person asked ghwatch to take the screenshots.")
+    reviewer_with(Minitest::Mock.new, roles).check_test_result(@task)
+    assert_equal "waiting_for_review", @task.state
+    assert_nil @task.last_review_signature, "the head is reviewed again"
+    assert_equal "Please take the screenshots yourself and show me.", @task.metadata.dig("human_answer", "body")
+    assert @task.retry_due?
+  end
+
   def test_a_pr_changed_since_the_test_is_reviewed_again
     answered_test
     @github.pull_request_data["headRefOid"] = "pushed-head"

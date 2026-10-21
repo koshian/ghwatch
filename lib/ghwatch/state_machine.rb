@@ -111,6 +111,7 @@ module Ghwatch
         "problem" => rule(:rework_or_escalate, :rework_review, :count_rework, :run_now),
         "author_changes" => rule("waiting_for_review", :retry_later),
         "incomplete" => rule("waiting_for_human_test", :start_wait, resume: "checking_test_result"),
+        "delegated" => rule("waiting_for_review", :reset_review, :run_now),
         "pr_changed" => rule("waiting_for_review", :run_now),
         "retry" => rule(nil, :retry_later),
         "failed" => rule(nil, :retry_later)
@@ -155,6 +156,7 @@ module Ghwatch
       ["test_judge", "passed"] => "Everything asked was confirmed, or a maintainer accepted it",
       ["test_judge", "problem"] => "The answer reports that the problem remains",
       ["test_judge", "incomplete"] => "Part of the request is unanswered; ask for that part only",
+      ["test_judge", "delegated"] => "The person asked ghwatch to do the check itself; the reviewer does it, with their reply",
       ["test_judge", "pr_changed"] => "The head is not the one the person tested; ghwatch checks this before the judge runs",
       ["merge", "pr_changed"] => "The PR changed after the review",
       ["merge", "pending"] => "Checks still running, or GitHub has not computed mergeability",

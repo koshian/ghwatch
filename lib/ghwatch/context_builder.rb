@@ -77,7 +77,8 @@ module Ghwatch
         specifications. Inspect the current PR diff, CI/check state, review discussion, and the
         related issue when present. Compare the change with current main where useful.
         #{human_answer(task)}
-        ghwatch prepared a detached review workspace at PR commit #{pull_request["headRefOid"]}.
+        ghwatch prepared the review workspace at PR commit #{pull_request["headRefOid"]}: the task
+        worktree, shared with the worker, or a separate detached one for a PR ghwatch only reviews.
         Build and run the project's tests and verification tools in this workspace. Generated
         build outputs, logs and screenshots are allowed; do not edit source, commit, push,
         merge, or create or switch worktrees/branches. Do not approve merely because tests pass.

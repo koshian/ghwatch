@@ -313,7 +313,7 @@ module Ghwatch
         when "incomplete"
           message = data["reporter_message"].to_s.strip.empty? ? data.fetch("body") : data["reporter_message"]
           wait_for_human(task, message, outcome, kind: "human-test", target: task.issue_number ? :issue : :pull_request)
-        when "retry"
+        when "delegated", "retry"
           nil
         else
           raise "unknown test result status #{data["status"].inspect}"

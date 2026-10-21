@@ -170,7 +170,7 @@ module Ghwatch
           "test_preparation": {
             "commit": "full tested commit SHA",
             "verified": ["checks performed and their results"],
-            "remaining": ["checks that require a person and why"],
+            "remaining": ["each check only a person can do, and why no tool such as Xvfb can do it"],
             "test_subject": "build/run link, artifact name, access and startup instructions, or why no artifact is needed",
             "steps": ["human test steps and expected results"]
           },
@@ -225,6 +225,14 @@ module Ghwatch
         worker's: use changes_requested and say what to prepare. Never ask a person to do it
         or to find someone who can.
         Do not waive a project requirement. Only request checks that actually require a person.
+        Before waiting_for_human_test, run every check you can yourself, including how the
+        change looks and behaves under Xvfb with the project's GUI tools and screenshots, and
+        list them under verified. Give each remaining item the reason only a person can check
+        it (real hardware, an OS or desktop you cannot run, IME, HiDPI, the reporter's own
+        setup). An item without such a reason is yours: check it instead of asking. When a
+        person's answer asks ghwatch to do a check itself (try it under Xvfb, take
+        screenshots), do it and report what you saw; do not ask them for it again. If they
+        need to see the screenshots, have the worker publish them (changes_requested).
         For waiting_for_human_test, include test_preparation and make body a self-contained
         request with the tested commit, what was verified, what remains, how to obtain and
         start the test subject, and steps with expected results. Explain when no artifact
@@ -249,7 +257,7 @@ module Ghwatch
 
         #{START_MARKER}
         {
-          "status": "passed|problem|incomplete|retry",
+          "status": "passed|problem|incomplete|delegated|retry",
           "body": "for the PR: what was asked, what the person reported, and the decision",
           "reporter_message": "for incomplete with a related issue: the follow-up request to the person",
           "reason": "short internal reason"
@@ -263,8 +271,11 @@ module Ghwatch
         means part of the request is unanswered or the answer is unclear; reporter_message
         then asks for that part only and repeats nothing that was answered. A different
         problem outside the issue is not a problem here: mention it in body for the
-        maintainers. Use retry only when the answer cannot be read now, for example an
-        attachment that fails to download.
+        maintainers. delegated means the person did not answer the check but asked ghwatch
+        to do it (try it under Xvfb, take screenshots and show them): you cannot, but the
+        reviewer can, so the PR goes back to review with their reply; do not ask them again.
+        Use retry only when the answer cannot be read now, for example an attachment that
+        fails to download.
 
         #{REPORTER_GUIDANCE}
       TEXT

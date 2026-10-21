@@ -85,6 +85,7 @@ class StateMachineTest < Minitest::Test
     },
     "test_judge" => {
       "passed" => "ready_to_merge", "problem" => "changes_requested", "incomplete" => "waiting_for_human_test",
+      "delegated" => "waiting_for_review",
       "author_changes" => "waiting_for_review",
       "pr_changed" => "waiting_for_review", "retry" => "same", "failed" => "same"
     },
