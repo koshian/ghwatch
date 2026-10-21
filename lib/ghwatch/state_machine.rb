@@ -88,6 +88,8 @@ module Ghwatch
         "deferred" => rule("done", :cleanup),
         "no_pr" => rule("continuing", :retry_later),
         "no_change" => rule(nil, :retry_later),
+        "not_handed_off" => rule("continuing", :run_now),
+        "handoff_failed" => rule("waiting_for_human_input", :start_wait, resume: "waiting_for_review"),
         "failed" => rule(nil, :retry_later)
       },
       "reviewer" => {
@@ -139,6 +141,8 @@ module Ghwatch
       ["worker", "deferred"] => "The issue's assessment becomes `deferred`",
       ["worker", "no_pr"] => "Ready or done reported, but no PR exists",
       ["worker", "no_change"] => "`continue` without any change to the repository or the PR",
+      ["worker", "not_handed_off"] => "Handed to review with tracked changes or unpushed commits left; sent back once to finish",
+      ["worker", "handoff_failed"] => "Still not ready to merge as handed over after being sent back; ask on the PR",
       ["reviewer", "branch_updated"] => "The PR was behind its base and was updated; review the new head",
       ["reviewer", "author_changes"] => "Changes requested on a PR ghwatch only reviews; its author makes them",
       ["test_judge", "author_changes"] => "The problem remains on a PR ghwatch only reviews; its author fixes it",

@@ -207,6 +207,8 @@ the first one with a rule for the task's group is applied.
 | `deferred` | `done`; remove worktrees | The issue's assessment becomes `deferred` |
 | `no_pr` | `continuing`; retry after `retry_after` | Ready or done reported, but no PR exists |
 | `no_change` | unchanged; retry after `retry_after` | `continue` without any change to the repository or the PR |
+| `not_handed_off` | `continuing`; run now | Handed to review with tracked changes or unpushed commits left; sent back once to finish |
+| `handoff_failed` | `waiting_for_human_input`; resumes `waiting_for_review`; start waiting | Still not ready to merge as handed over after being sent back; ask on the PR |
 | `failed` | unchanged; retry after `retry_after` |  |
 
 **reviewer**

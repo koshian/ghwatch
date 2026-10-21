@@ -194,6 +194,20 @@ module Ghwatch
       task.metadata["human_wait_cleanup_marker"] = task.human_marker
     end
 
+    # What keeps a hand-off from being merged as it is: tracked changes left
+    # in the task worktree, or commits the PR does not have. nil when there is
+    # nothing, or no worktree to look at.
+    def handoff_problem(task, pull_request)
+      path = task_worktree(task) or return nil
+
+      head = fetch_pull_request_head(task, pull_request)
+      changed = tracked_changes(path)
+      unpushed = git("-C", path.to_s, "log", "--format=%h %s", "#{head}..HEAD").lines.map(&:strip).reject(&:empty?)
+      return nil if changed.empty? && unpushed.empty?
+
+      {path: path.to_s, changed: changed, unpushed: unpushed}
+    end
+
     def prepare_pull_request(task, pull_request, state:)
       raise "cannot prepare a PR without its head repository" unless pull_request.dig("headRepository", "nameWithOwner")
 
@@ -228,6 +242,23 @@ module Ghwatch
     end
 
     private
+
+    def task_worktree(task)
+      path = task.worktree && Pathname(task.worktree)
+      path if path&.exist? && registered_worktree?(path)
+    end
+
+    def tracked_changes(path)
+      git("-C", path.to_s, "status", "--porcelain", "--untracked-files=no").lines.map(&:chomp).reject(&:empty?)
+    end
+
+    def fetch_pull_request_head(task, pull_request)
+      git("fetch", "origin", "refs/pull/#{task.pr_number || pull_request.fetch("number")}/head")
+      head = git("rev-parse", "FETCH_HEAD").strip
+      raise "PR head changed while looking at it; retry" unless head == pull_request.fetch("headRefOid")
+
+      head
+    end
 
     def verify_review_workspace(path)
       raise "review workspace is on a branch: #{path}" if git_result("-C", path.to_s, "symbolic-ref", "--quiet", "HEAD").success?

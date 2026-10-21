@@ -74,7 +74,8 @@ class StateMachineTest < Minitest::Test
     "worker" => {
       "waiting_for_review" => "waiting_for_review", "waiting_for_human_input" => "waiting_for_human_input",
       "continue" => "continuing", "done" => "waiting_for_review", "merged" => "finalizing", "deferred" => "done",
-      "no_pr" => "continuing", "no_change" => "same", "failed" => "same"
+      "no_pr" => "continuing", "no_change" => "same", "not_handed_off" => "continuing",
+      "handoff_failed" => "waiting_for_human_input", "failed" => "same"
     },
     "reviewer" => {
       "branch_updated" => "same", "merge" => "ready_to_merge", "changes_requested" => "changes_requested",

@@ -74,6 +74,8 @@ module Ghwatch
           task.pr_number = pull_request.fetch("number")
           task.metadata["test_preparation"] = data["test_preparation"]
           task.metadata["human_test_request"] = (data["status"] == "waiting_for_human_test") ? data.fetch("question") : nil
+          return if unready_handoff(task, pull_request, outcome)
+
           decide(task, "worker", "waiting_for_review")
         when "waiting_for_human_input"
           wait_for_human(task, data.fetch("question"), outcome, kind: "human-question")
@@ -91,6 +93,48 @@ module Ghwatch
         else
           raise "unknown worker status #{data["status"].inspect}"
         end
+      end
+
+      # A PR goes to review only as it could be merged: the review may run in
+      # this worktree and must see what the PR has. A worker that left
+      # something behind is sent back once; then a person decides.
+      def unready_handoff(task, pull_request, outcome)
+        problem = @worktrees&.handoff_problem(task, pull_request)
+        unless problem
+          task.metadata.delete("handoff_returns")
+          task.metadata.delete("rework_reason") if task.metadata.delete("handoff_rework")
+          return false
+        end
+
+        details = handoff_details(problem)
+        @log.warn("[#{task.id}] handed to review but not ready to merge as it is: #{details.tr("\n", " ")}")
+        if task.metadata["handoff_returns"].to_i < 1
+          task.metadata["handoff_returns"] = 1
+          task.metadata["handoff_rework"] = true
+          task.metadata["rework_reason"] = "The PR was handed to review but could not be merged as it is.\n#{details}\n" \
+            "Commit and push what belongs in the PR, and restore (git restore) what does not. " \
+            "Do not commit temporary files; they may stay untracked."
+          decide(task, "worker", "not_handed_off")
+        else
+          task.metadata.delete("handoff_returns")
+          body = <<~TEXT
+            The worker handed this PR to review again without it being ready to merge as it is:
+
+            #{details}
+
+            Please decide what belongs in the PR (push the commits, or commit or discard the changes in that worktree) and reply here; the PR will then be reviewed.
+          TEXT
+          wait_for_human(task, body, Struct.new(:signature).new("ghwatch"), kind: "human-question", target: :pull_request)
+          decide(task, "worker", "handoff_failed")
+        end
+        true
+      end
+
+      def handoff_details(problem)
+        lines = []
+        lines << "Tracked changes in #{problem[:path]}: #{problem[:changed].map(&:strip).join(", ")}" unless problem[:changed].empty?
+        lines << "Commits not pushed to the PR: #{problem[:unpushed].join("; ")}" unless problem[:unpushed].empty?
+        lines.join("\n")
       end
 
       # Every push is explained on the PR: the worker's summary, and the new
