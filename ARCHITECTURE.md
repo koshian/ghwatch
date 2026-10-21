@@ -219,6 +219,7 @@ the first one with a rule for the task's group is applied.
 | `merge` | `ready_to_merge`; run now | Approved; with `auto_merge` off a person merges |
 | `changes_requested` | `changes_requested` (after 3 rounds: ask a person, resuming `changes_requested`); rework: the latest review; count a rework round; run now |  |
 | `author_changes` | `waiting_for_review`; retry after `retry_after` | Changes requested on a PR ghwatch only reviews; its author makes them |
+| `workspace_diverged` | `waiting_for_human_input`; resumes `waiting_for_review`; start waiting | The task worktree cannot follow the PR head without losing something; ask on the PR |
 | `waiting_for_human_input` | `waiting_for_human_input`; resumes `waiting_for_review`; start waiting |  |
 | `waiting_for_human_test` | `waiting_for_human_test`; resumes `checking_test_result`; start waiting |  |
 | `comment` | unchanged; retry after `retry_after` | Non-blocking; the same head is not reviewed again until something changes |

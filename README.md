@@ -420,10 +420,30 @@ update, such as a conflict or a fork without maintainer edits, is logged and the
 reviewed as is; the same head is not updated again. Workers are told to integrate the
 remote PR head before committing more. Set `github.update_pr_branches = false` to disable.
 
-Then ghwatch prepares a separate detached worktree at
-`.worktrees/review-pr-N`, fetching the PR head and checking it matches the snapshot SHA.
-An existing owned review workspace is updated to that SHA without changing the worker's
-workspace. Reviewers may build, run tests and use project-provided GUI verification tools
+A worker hands a PR to review only as it could be merged: when it does, ghwatch checks that
+the task worktree has no tracked changes and no commits the PR lacks. Untracked files may
+stay. A worker that left something is sent back once with the files and commits named; if
+it hands over the same way again, a person is asked on the PR.
+
+The review then runs in the task worktree, so it reuses what the worker built (`target/`
+and the like) instead of building everything again. ghwatch first brings that worktree to
+the PR head when nothing is lost: it fast-forwards a worktree that is behind (for example
+after the branch update above), and moves one whose commits are all in the PR in another
+form (a rebase someone pushed). A worktree that is not on its branch, has tracked changes,
+or has commits the PR does not, means the work went astray: a person is asked on the PR,
+and the review resumes when they reply. Before each worker run the worktree follows the PR
+the same way, and is otherwise left for the worker to integrate.
+
+Reviewers must leave the shared worktree as they found it. ghwatch records its branch, HEAD
+and untracked files before the review and puts it back afterwards: tracked changes are saved
+as a patch and reverted, new untracked files are moved out, and a moved branch or HEAD is
+reset. What it finds is recorded on the task (the latest five) and kept under
+`.git/ghwatch/review-leftovers/<task>/`; a review ghwatch did not see finish is put back when
+ghwatch starts. Ignored files, such as build outputs, stay.
+
+A PR ghwatch only reviews has no task worktree; ghwatch prepares a separate detached worktree
+at `.worktrees/review-pr-N` for it, fetching the PR head and checking it matches the snapshot
+SHA. An existing owned review workspace is updated to that SHA. Reviewers may build, run tests and use project-provided GUI verification tools
 such as Xvfb; they cannot edit source, commit, push or merge. Review feedback must describe
 the tested SHA, commands, observations and evidence paths. Human requests are limited to
 checks the reviewer cannot perform. Reviewers may start CI or test-build workflows for the
@@ -443,7 +463,7 @@ purpose, observed errors, a copyable apt installation command and verification s
 The human provisions the environment and replies on the PR; ghwatch then resumes review
 so the reviewer performs the blocked checks itself. ghwatch does not install OS packages.
 
-Review workspaces survive retries and CI waits. ghwatch removes them when the task starts
+Separate review workspaces survive retries and CI waits. ghwatch removes them when the task starts
 waiting for a person, and after confirming merge or closure, including externally
 merged/closed PRs during reconciliation. The next review recreates the workspace.
 Unowned directories, attached branches and tracked source changes are refused rather than
@@ -451,8 +471,8 @@ overwritten or deleted. Generated build outputs may be removed with the owned wo
 publish evidence elsewhere if it must remain available after the PR closes. A PR changed
 during review is retried against its new head before accepting the review result.
 
-Reviewers must not change tracked files. After every review run, and when ghwatch starts,
-ghwatch checks each review workspace for tracked changes and, when it finds some, records
+Reviewers must not change tracked files. After every review run in a separate workspace,
+and when ghwatch starts, ghwatch checks each such workspace for tracked changes and, when it finds some, records
 the time, what had just happened (which role and model ran, or the startup) and the changed
 files on the task, keeping the latest five. Nothing is reverted, so the evidence stays;
 the review stops as before until a person has looked. `ghwatch status` shows each active

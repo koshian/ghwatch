@@ -16,9 +16,13 @@ module Ghwatch
         return if update_behind_branch(task, pull_request)
         return if skip_repeat_review(task, snapshot, pull_request)
 
-        workspace = @worktrees.prepare_review(task, pull_request, state: @state)
+        workspace = review_workspace(task, pull_request) or return
         context = @context_builder.reviewer(task: task, issue: issue, pull_request: pull_request)
-        outcome = @roles.run(role, context: context, cwd: workspace, task: task)
+        outcome = begin
+          @roles.run(role, context: context, cwd: workspace, task: task)
+        ensure
+          finish_shared_review(task, "after the #{role} run")
+        end
         remember_outcome(task, outcome)
         record_workspace_changes(task, "after the #{role} run (#{outcome.signature})")
 
@@ -187,6 +191,48 @@ module Ghwatch
         @worktrees.record_workspace_changes(task, trigger: trigger)
       rescue => e
         @log.warn("[#{task.id}] could not check the review workspace: #{e.message}")
+      end
+
+      # The task worktree, at the PR head, so the review reuses what the
+      # worker built; a separate workspace for a PR ghwatch only reviews. A
+      # task worktree that cannot follow the PR without losing something
+      # means the work went astray, and a person decides.
+      def review_workspace(task, pull_request)
+        return @worktrees.prepare_review(task, pull_request, state: @state) unless @worktrees.shared_review?(task)
+
+        followed = @worktrees.follow_pull_request(task, pull_request)
+        if followed.is_a?(String)
+          ask_about_diverged_worktree(task, pull_request, followed)
+          return nil
+        end
+
+        release_separate_workspace(task)
+        @worktrees.begin_shared_review(task, state: @state)
+      end
+
+      def ask_about_diverged_worktree(task, pull_request, reason)
+        @log.warn("[#{task.id}] the task worktree cannot follow PR ##{task.pr_number}: #{reason}")
+        body = <<~TEXT
+          Before reviewing this PR, ghwatch could not bring the task worktree to the PR head #{pull_request["headRefOid"]}: #{reason}.
+
+          The review runs in that worktree to reuse what the worker built, so it has to match the PR. Please decide which is right (push the worktree's commits to the PR, or discard them so the worktree follows the PR) and reply here; the PR will then be reviewed.
+        TEXT
+        wait_for_human(task, body, Struct.new(:signature).new("ghwatch"), kind: "human-question", target: :pull_request)
+        decide(task, "reviewer", "workspace_diverged")
+        @state.save_task(task)
+      end
+
+      # A workspace from before reviews moved into the task worktree.
+      def release_separate_workspace(task)
+        @worktrees.cleanup_review(task)
+      rescue => e
+        @log.warn("[#{task.id}] could not remove the separate review workspace: #{e.message}")
+      end
+
+      def finish_shared_review(task, trigger)
+        @worktrees.end_shared_review(task, trigger: trigger)
+      rescue => e
+        @log.error("[#{task.id}] could not put the task worktree back after the review: #{e.message}")
       end
 
       def linked_issue_number(pull_request)

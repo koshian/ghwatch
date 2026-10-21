@@ -6,6 +6,14 @@ require "minitest/mock"
 require "stringio"
 
 class ReviewWorkspaceTest < Minitest::Test
+  # The separate review workspace these tests mock; the shared one is tested
+  # with real worktrees in shared_review_test.rb.
+  class SeparateWorkspaces < SimpleDelegator
+    def shared_review?(task) = false
+
+    def end_shared_review(task, trigger:) = false
+  end
+
   class Github < Ghwatch::Github
     attr_accessor :pull_request_data
 
@@ -41,7 +49,7 @@ class ReviewWorkspaceTest < Minitest::Test
       true
     end
     reviewer = Ghwatch::Actions::Reviewer.new(
-      worktrees: worktrees, project: nil, config: @config, state: @state,
+      worktrees: SeparateWorkspaces.new(worktrees), project: nil, config: @config, state: @state,
       github: @github, roles: roles, context_builder: Ghwatch::ContextBuilder.new(config: @config),
       human_channel: nil, log: Ghwatch::Log.new(StringIO.new)
     )
@@ -94,7 +102,7 @@ class ReviewWorkspaceTest < Minitest::Test
       end
     end
     reviewer = Ghwatch::Actions::Reviewer.new(
-      worktrees: worktrees, project: nil, config: @config, state: @state,
+      worktrees: SeparateWorkspaces.new(worktrees), project: nil, config: @config, state: @state,
       github: @github, roles: roles, context_builder: Ghwatch::ContextBuilder.new(config: @config),
       human_channel: nil, log: Ghwatch::Log.new(StringIO.new)
     )
@@ -200,7 +208,7 @@ class ReviewWorkspaceTest < Minitest::Test
     roles.expect(:run, outcome) { |role, **options| true }
     log = StringIO.new
     reviewer = Ghwatch::Actions::Reviewer.new(
-      worktrees: worktrees, project: nil, config: @config, state: @state,
+      worktrees: SeparateWorkspaces.new(worktrees), project: nil, config: @config, state: @state,
       github: @github, roles: roles, context_builder: Ghwatch::ContextBuilder.new(config: @config),
       human_channel: nil, log: Ghwatch::Log.new(log)
     )
@@ -337,7 +345,7 @@ class ReviewWorkspaceTest < Minitest::Test
 
   def reviewer_with(worktrees, roles, human_channel: nil)
     Ghwatch::Actions::Reviewer.new(
-      worktrees: worktrees, project: OpenStruct.new(root: "/project"), config: @config, state: @state,
+      worktrees: SeparateWorkspaces.new(worktrees), project: OpenStruct.new(root: "/project"), config: @config, state: @state,
       github: @github, roles: roles, context_builder: Ghwatch::ContextBuilder.new(config: @config),
       human_channel: human_channel, log: Ghwatch::Log.new(StringIO.new)
     )

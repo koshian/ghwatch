@@ -30,7 +30,12 @@ module Ghwatch
 
     def audit_review_workspaces(trigger:)
       active_tasks.each do |task|
-        @state.save_task(task) if @worktrees&.record_workspace_changes(task, trigger: trigger)
+        # A review that ghwatch did not see finish left the task worktree as
+        # it was at that moment.
+        shared = task.metadata.key?("shared_review")
+        @worktrees&.end_shared_review(task, trigger: trigger) if shared
+        changed = @worktrees&.record_workspace_changes(task, trigger: trigger)
+        @state.save_task(task) if shared || changed
       rescue => e
         @log.warn("[#{task.id}] could not check the review workspace: #{e.message}")
       end

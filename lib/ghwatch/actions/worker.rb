@@ -16,6 +16,7 @@ module Ghwatch
           @state.save_task(task)
         end
         @worktrees&.restore_task_worktree(task)
+        follow_pull_request(task, snapshot.pull_request)
         head_before = snapshot.pull_request&.fetch("headRefOid", nil)
         repository_before = RepositoryState.capture(command: @command, cwd: task.worktree || @project.root)
         context = @context_builder.worker(
@@ -93,6 +94,18 @@ module Ghwatch
         else
           raise "unknown worker status #{data["status"].inspect}"
         end
+      end
+
+      # The worktree catches up with what others pushed to the PR (ghwatch
+      # merging the base in, a rebase), as long as nothing is lost; anything
+      # else is the worker's to integrate.
+      def follow_pull_request(task, pull_request)
+        return unless pull_request && task.worktree && @worktrees
+
+        followed = @worktrees.follow_pull_request(task, pull_request)
+        @log.info("[#{task.id}] the worktree followed PR ##{pull_request["number"]} (#{followed})") if %i[fast_forward reset].include?(followed)
+      rescue => e
+        @log.warn("[#{task.id}] could not bring the worktree to the PR head: #{e.message}")
       end
 
       # A PR goes to review only as it could be merged: the review may run in

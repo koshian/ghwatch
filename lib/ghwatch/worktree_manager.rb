@@ -194,6 +194,12 @@ module Ghwatch
       task.metadata["human_wait_cleanup_marker"] = task.human_marker
     end
 
+    # The review runs in the task worktree, reusing what the worker built,
+    # unless ghwatch only reviews the PR (no worktree of its own).
+    def shared_review?(task)
+      !task.metadata["review_only"] && !task_worktree(task).nil?
+    end
+
     # What keeps a hand-off from being merged as it is: tracked changes left
     # in the task worktree, or commits the PR does not have. nil when there is
     # nothing, or no worktree to look at.
@@ -206,6 +212,103 @@ module Ghwatch
       return nil if changed.empty? && unpushed.empty?
 
       {path: path.to_s, changed: changed, unpushed: unpushed}
+    end
+
+    # Brings the task worktree to the PR head when nothing is lost: it is
+    # behind, or its commits are all in the PR in another form (a rebase
+    # someone pushed). Returns :same, :fast_forward or :reset, or why it
+    # could not.
+    def follow_pull_request(task, pull_request)
+      path = task_worktree(task) or return "the task has no worktree"
+
+      branch = task.metadata["local_branch"] || task.branch
+      current = git_result("-C", path.to_s, "symbolic-ref", "--quiet", "--short", "HEAD")
+      return "#{path} is not on its branch #{branch}" unless current.success? && current.stdout.strip == branch
+
+      changed = tracked_changes(path)
+      return "#{path} has tracked changes: #{changed.map(&:strip).join(", ")}" unless changed.empty?
+
+      head = fetch_pull_request_head(task, pull_request)
+      local = git("-C", path.to_s, "rev-parse", "HEAD").strip
+      return :same if local == head
+
+      if ancestor?(path, local, head)
+        result = git_result("-C", path.to_s, "merge", "--ff-only", "--quiet", head)
+        return result.success? ? :fast_forward : "#{path} could not be fast-forwarded to #{head}: #{result.text.strip}"
+      end
+      unless git("-C", path.to_s, "cherry", head, local).lines.all? { |line| line.start_with?("-") }
+        commits = git("-C", path.to_s, "log", "--format=%h %s", "#{head}..#{local}").lines.map(&:strip)
+        return "#{path} has commits the PR does not: #{commits.join("; ")}"
+      end
+
+      git("-C", path.to_s, "reset", "--hard", "--quiet", head)
+      @log.info("[#{task.id}] moved #{path} from #{local} to the PR head #{head}, which has its commits")
+      :reset
+    end
+
+    # A review in the task worktree starts from what is recorded here, and
+    # whatever it changes is put back afterwards (see #end_shared_review).
+    def begin_shared_review(task, state:)
+      path = task_worktree(task) or raise "the task has no worktree to review in"
+
+      task.metadata["shared_review"] = {
+        "path" => path.to_s,
+        "branch" => git("-C", path.to_s, "symbolic-ref", "--short", "HEAD").strip,
+        "head" => git("-C", path.to_s, "rev-parse", "HEAD").strip,
+        "untracked" => untracked_files(path)
+      }
+      state.save_task(task)
+      path.to_s
+    end
+
+    # Reviewers must leave the worker's worktree as they found it. Tracked
+    # changes are saved as a patch and reverted, new untracked files are moved
+    # out, and a moved branch or HEAD is put back; all of it is recorded on the
+    # task and kept under the runtime directory. Returns whether anything was.
+    def end_shared_review(task, trigger:)
+      # The record goes only once all is back, so a failure is retried at
+      # the next start.
+      review = task.metadata["shared_review"] or return false
+
+      path = Pathname(review["path"])
+      unless path.exist? && registered_worktree?(path)
+        task.metadata.delete("shared_review")
+        return false
+      end
+
+      keep = @project.runtime_dir.join("review-leftovers", task.id, Time.now.utc.strftime("%Y%m%dT%H%M%SZ"))
+      record = {"at" => Time.now.utc.iso8601, "trigger" => trigger, "kept" => keep.to_s}
+      changed = tracked_changes(path)
+      unless changed.empty?
+        FileUtils.mkdir_p(keep)
+        keep.join("changes.patch").write(git("-C", path.to_s, "diff", "--binary", "HEAD"))
+        record["changed"] = changed
+      end
+      added = untracked_files(path) - review["untracked"]
+      unless added.empty?
+        added.each do |file|
+          FileUtils.mkdir_p(keep.join("files", file).dirname)
+          FileUtils.mv(path.join(file), keep.join("files", file))
+        end
+        record["moved"] = added
+      end
+      branch = git_result("-C", path.to_s, "symbolic-ref", "--quiet", "--short", "HEAD").stdout.strip
+      head = git("-C", path.to_s, "rev-parse", "HEAD").strip
+      record["branch"] = branch unless branch == review["branch"]
+      if head != review["head"]
+        record["head"] = head
+        record["commits"] = git("-C", path.to_s, "log", "--format=%h %s", "#{review["head"]}..#{head}").lines.map(&:strip)
+      end
+      if !changed.empty? || record.key?("branch") || record.key?("head")
+        git("-C", path.to_s, "checkout", "--force", "--quiet", review["branch"])
+        git("-C", path.to_s, "reset", "--hard", "--quiet", review["head"])
+      end
+      task.metadata.delete("shared_review")
+      return false unless (%w[changed moved branch head] & record.keys).any?
+
+      task.metadata["shared_review_changes"] = (Array(task.metadata["shared_review_changes"]) << record).last(WORKSPACE_CHANGE_RECORDS)
+      @log.warn("[#{task.id}] the review left #{path} changed #{trigger}; put it back and kept what it left in #{keep}")
+      true
     end
 
     def prepare_pull_request(task, pull_request, state:)
@@ -246,6 +349,14 @@ module Ghwatch
     def task_worktree(task)
       path = task.worktree && Pathname(task.worktree)
       path if path&.exist? && registered_worktree?(path)
+    end
+
+    def ancestor?(path, ancestor, descendant)
+      git_result("-C", path.to_s, "merge-base", "--is-ancestor", ancestor, descendant).success?
+    end
+
+    def untracked_files(path)
+      git("-C", path.to_s, "ls-files", "--others", "--exclude-standard", "-z").split("\0").reject(&:empty?)
     end
 
     def tracked_changes(path)

@@ -79,7 +79,7 @@ class StateMachineTest < Minitest::Test
     },
     "reviewer" => {
       "branch_updated" => "same", "merge" => "ready_to_merge", "changes_requested" => "changes_requested",
-      "author_changes" => "waiting_for_review",
+      "author_changes" => "waiting_for_review", "workspace_diverged" => "waiting_for_human_input",
       "waiting_for_human_input" => "waiting_for_human_input", "waiting_for_human_test" => "waiting_for_human_test",
       "comment" => "same", "retry" => "same", "already_reviewed" => "same", "pr_changed" => "same", "failed" => "same"
     },
