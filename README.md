@@ -263,6 +263,8 @@ model = "gpt-6-luna"
 
 The first worker is preferred. In this example Codex is used only when Claude reports a
 capacity/quota condition. Ordinary command failures do not silently fall through.
+Claude's weekly and session limit messages are classified as `quota`, so they also
+trigger a fallback when `quota` is listed in `fallback_on`.
 
 `test_judge` reads a person's answer to a reviewer's test request (see below). It needs no
 build or workspace, so a light model will do; without `[roles.test_judge]` it runs on the

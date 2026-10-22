@@ -38,6 +38,37 @@ class RunnerResultTest < Minitest::Test
     assert_equal "quota", invoke("quota exceeded\nGHWATCH_RESULT_BEGIN\ninvalid JSON\nGHWATCH_RESULT_END").error_kind
   end
 
+  def test_claude_weekly_and_session_limits_fall_back_to_luna
+    ["You've hit your weekly limit · resets 6am (Asia/Tokyo)",
+      "You've hit your session limit · resets 7:50pm (Asia/Tokyo)"].each do |message|
+      [0, 1].each do |exit_code|
+        [false, true].each do |stderr|
+          command = Minitest::Mock.new
+          limited = Ghwatch::Command::Result.new(argv: [], stdout: stderr ? "" : message,
+            stderr: stderr ? message : "", exit_code: exit_code, timed_out: false)
+          output = "GHWATCH_RESULT_BEGIN\n{\"status\":\"continue\"}\nGHWATCH_RESULT_END\n"
+          success = Ghwatch::Command::Result.new(argv: [], stdout: output, stderr: "", exit_code: 0, timed_out: false)
+          command.expect(:run, limited) { |*args, **options| args.first == "claude" && args.include?("sonnet") }
+          command.expect(:run, success) { |*args, **options| args.first == "codex" && args.include?("gpt-6-luna") }
+          config = Ghwatch::Config.new({"roles" => {"worker" => {"models" => [
+            {"runner" => "claude", "model" => "sonnet", "fallback_on" => ["quota"]},
+            {"runner" => "codex", "model" => "gpt-6-luna"}
+          ]}}})
+          prompts = Object.new
+          def prompts.compose(role, context:) = "prompt"
+          runner = Ghwatch::RoleRunner.new(config: config, command: command, prompt_store: prompts,
+            log: Ghwatch::Log.new(StringIO.new))
+
+          outcome = runner.run("worker", context: "context", cwd: ".")
+
+          assert outcome.success?, message
+          assert_equal "gpt-6-luna", outcome.model
+          command.verify
+        end
+      end
+    end
+  end
+
   def test_codex_runs_without_its_sandbox_unless_one_is_configured
     argv = lambda do |settings|
       seen = nil

@@ -62,7 +62,7 @@ module Ghwatch
         return nil if result.success? && valid_result?(result.stdout)
 
         text = result.text.downcase
-        return "quota" if ["usage limit", "usage limits", "quota", "no weighted tokens left", "no tokens left"].any? { |pattern| text.include?(pattern) }
+        return "quota" if ["usage limit", "usage limits", "weekly limit", "session limit", "quota", "no weighted tokens left", "no tokens left"].any? { |pattern| text.include?(pattern) }
         return "capacity" if capacity_patterns.any? { |pattern| text.include?(pattern.downcase) }
         return nil if result.success?
 
