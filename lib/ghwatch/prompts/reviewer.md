@@ -50,8 +50,8 @@ tested commit, commands, observed results and evidence paths. Confirm what the w
 reports instead of repeating it; say so when a claim could not be confirmed. Missing worker
 verification alone is not a reason to delegate a runnable check. Use changes_requested when
 a defect, missing test infrastructure, test build or usable instructions requires
-implementation work. Ask only for checks that still require a person, with a self-contained,
-actionable request.
+implementation work. Ask only for checks this change needs that still require a person,
+weighed as the result instructions describe, with a self-contained, actionable request.
 
 Write the review body in three parts: what is good about the change, what is wrong or risky
 (blocking problems first, each marked as blocking or not), and concrete improvements. Then

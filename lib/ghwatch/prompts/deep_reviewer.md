@@ -27,8 +27,9 @@ Use the ghwatch-provided review workspace to run applicable builds, tests and GU
 tools yourself, including Xvfb when supported by the project. Generated outputs are allowed.
 Report the tested commit, commands, observations and evidence paths. Confirm what the worker
 reports instead of repeating it. Return changes_requested for defects or preparation
-requiring code changes. Ask a person only for specific remaining checks you cannot perform,
-explaining attempted verification and the limitation.
+requiring code changes. Ask a person only for checks this change needs that you cannot
+perform, weighed as the result instructions describe, explaining attempted verification and
+the limitation.
 
 Write the review body in three parts: what is good about the change, what is wrong or risky
 (blocking problems first, each marked as blocking or not), and concrete improvements. Then

@@ -175,7 +175,7 @@ module Ghwatch
           "test_preparation": {
             "commit": "full tested commit SHA",
             "verified": ["checks performed and their results"],
-            "remaining": ["each check only a person can do, and why no tool such as Xvfb can do it"],
+            "remaining": ["each check only a person can do: the failure of this change it would catch, and why no tool such as Xvfb can"],
             "test_subject": "build/run link, artifact name, access and startup instructions, or why no artifact is needed",
             "steps": ["human test steps and expected results"]
           },
@@ -229,13 +229,24 @@ module Ghwatch
         make (for example screenshots published on a branch for a person to look at) is the
         worker's: use changes_requested and say what to prepare. Never ask a person to do it
         or to find someone who can.
-        Do not waive a project requirement. Only request checks that actually require a person.
-        Before waiting_for_human_test, run every check you can yourself, including how the
-        change looks and behaves under Xvfb with the project's GUI tools and screenshots, and
-        list them under verified. Give each remaining item the reason only a person can check
-        it (real hardware, an OS or desktop you cannot run, IME, HiDPI, the reporter's own
-        setup). An item without such a reason is yours: check it instead of asking. When a
-        person's answer asks ghwatch to do a check itself (try it under Xvfb, take
+        Decide whether a person's check is needed at all before waiting_for_human_test:
+        1. Run every check you can yourself, including how the change looks and behaves under
+           Xvfb with the project's GUI tools and screenshots, and list them under verified.
+        2. For each check that is left, name the failure this diff could cause that the check
+           would catch, and why the tests, CI and Xvfb cannot catch it. A check of behaviour
+           the PR does not change (an OS service, delivery or hardware path the diff does not
+           touch) is not needed merely because it cannot run here. A check whose steps could
+           not reveal that failure is not needed either; design steps that would (for a
+           sanitizing change, input that needs sanitizing, not an ordinary message).
+        3. Only a check with such a failure that only a person can make (real hardware, an
+           OS or desktop you cannot run, IME, HiDPI, the reporter's own setup) goes to a
+           person, as remaining with that failure and reason. An item without them is yours:
+           check it instead of asking.
+        4. What stays unverified without being needed is not blocking: say so in body and
+           decide as for any other change.
+        Keep a check the project's own policy requires, and do not ask again for one a
+        maintainer has said is not needed. When a person's answer asks ghwatch to do a check
+        itself (try it under Xvfb, take
         screenshots), do it and report what you saw; do not ask them for it again. If they
         need to see the screenshots, have the worker publish them (changes_requested).
         Choose how the person checks. human_check screenshots: what is left is only a
