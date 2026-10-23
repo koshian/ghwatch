@@ -205,7 +205,9 @@ the first one with a rule for the task's group is applied.
 | `done` | `waiting_for_review`; run now | The PR is open |
 | `merged` | `finalizing` (no issue: `done`); run now | `done` reported and the PR is already merged |
 | `deferred` | `done`; remove worktrees | The issue's assessment becomes `deferred` |
-| `no_pr` | `continuing`; retry after `retry_after` | Ready or done reported, but no PR exists |
+| `no_pr` | `continuing`; retry after `retry_after` | Ready reported, but no PR exists |
+| `no_pr_limit` | `waiting_for_human_input`; resumes `continuing`; start waiting | Ready reported without a PR 3 times in a row; ask on the issue |
+| `no_change_needed` | `waiting_for_human_input`; resumes `continuing`; start waiting | Done without a change or a PR; post what the worker found on the issue and let a person decide |
 | `no_change` | unchanged; retry after `retry_after` | `continue` without any change to the repository or the PR |
 | `not_handed_off` | `continuing`; run now | Handed to review with tracked changes or unpushed commits left; sent back once to finish |
 | `handoff_failed` | `waiting_for_human_input`; resumes `waiting_for_review`; start waiting | Still not ready to merge as handed over after being sent back; ask on the PR |

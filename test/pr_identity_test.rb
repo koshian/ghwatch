@@ -229,14 +229,32 @@ class PrIdentityTest < Minitest::Test
     roles.verify
   end
 
-  def test_worker_retries_when_done_or_ready_for_review_without_a_pr
+  def test_worker_retries_without_a_pr_a_few_times_then_asks
     worker = Ghwatch::Actions::Worker.new(worktrees: nil, command: nil, **action_options)
-    %w[done waiting_for_review waiting_for_human_test].each do |status|
+    %w[done waiting_for_review].each do |status|
       worker.send(:apply_result, @task, OpenStruct.new(data: {"status" => status}))
       assert_equal "continuing", @task.state
       assert @task.retry_at
       assert_nil @task.pr_number
     end
+    worker.send(:apply_result, @task, OpenStruct.new(data: {"status" => "waiting_for_human_test"}))
+    assert_equal "waiting_for_human_input", @task.state
+    assert_equal "continuing", @task.metadata["resume_state"]
+    kind, number, body = @github.comments.last
+    assert_equal [:issue, @task.issue_number], [kind, number]
+    assert_match(/no PR/, body)
+  end
+
+  def test_work_that_needs_no_change_goes_to_a_person_with_what_the_worker_found
+    worker = Ghwatch::Actions::Worker.new(worktrees: nil, command: nil, **action_options)
+    worker.send(:apply_result, @task, OpenStruct.new(data: {"status" => "done", "summary" => "Sharing it would add three switches; not worth it."},
+      signature: "worker"))
+    assert_equal "waiting_for_human_input", @task.state
+    assert_nil @task.retry_at
+    assert_nil @task.pr_number
+    kind, number, body = @github.comments.last
+    assert_equal [:issue, @task.issue_number], [kind, number]
+    assert_includes body, "Sharing it would add three switches"
   end
 
   def test_worker_human_test_proposal_is_persisted_and_reviewed_before_notifying_a_person

@@ -114,9 +114,12 @@ module Ghwatch
         Once the change is implemented, verified with the project's own tools and pushed,
         return waiting_for_review with the PR number; do not claim it before the branch is
         pushed and the PR exists. Use continue only when the implementation itself is not
-        finished and another pass of yours is needed, never to prepare testing. Use
-        waiting_for_human_input, with a complete question, for information, decisions or
-        access you cannot obtain yourself.
+        finished and another pass of yours is needed, never to prepare testing. When the work
+        turns out to need no change (what you found shows it should not be done, or the issue
+        allows closing it with a recorded reason), open no PR and return done with summary
+        saying what you found and what you recommend, written for the issue's readers;
+        ghwatch posts it on the issue and a person decides. Use waiting_for_human_input, with
+        a complete question, for information, decisions or access you cannot obtain yourself.
 
         Whenever you pushed to the PR, write summary for the reviewers and maintainers who
         read the PR: what changed and why, how it answers each review point or failed check of

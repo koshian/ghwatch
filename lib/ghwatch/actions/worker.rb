@@ -3,6 +3,8 @@
 module Ghwatch
   module Actions
     class Worker < Base
+      NO_PR_LIMIT = 3
+
       def initialize(worktrees:, command:, **kwargs)
         super(**kwargs)
         @worktrees = worktrees
@@ -59,6 +61,7 @@ module Ghwatch
 
       def apply_result(task, outcome)
         data = outcome.data
+        task.metadata.delete("no_pr_streak") unless %w[waiting_for_review waiting_for_human_test done].include?(data["status"])
 
         case data["status"]
         when "waiting_for_review", "waiting_for_human_test"
@@ -85,7 +88,7 @@ module Ghwatch
           decide(task, "worker", "continue")
         when "done"
           pull_request = TaskSnapshot.capture(task: task, github: @github).pull_request
-          return retry_without_pull_request(task) unless pull_request
+          return hand_findings_over(task, data, outcome) unless pull_request
 
           task.pr_number = pull_request.fetch("number")
           decide(task, "worker", pull_request["mergedAt"] ? "merged" : "done")
@@ -173,10 +176,36 @@ module Ghwatch
         result.success? ? result.stdout.lines.map(&:strip).reject(&:empty?) : []
       end
 
+      # Ready for review, yet no PR: tried again a few times, then a person
+      # is asked rather than the worker run on and on.
       def retry_without_pull_request(task)
+        streak = task.metadata["no_pr_streak"] = task.metadata["no_pr_streak"].to_i + 1
+        if streak >= NO_PR_LIMIT && task.issue_number
+          task.metadata.delete("no_pr_streak")
+          body = japanese? ? "ワーカーが #{streak} 回続けて「レビューに渡せる」と報告しましたが、PR がありません。どう進めるかを返信してください。返信すると作業を再開します。" :
+            "The worker reported #{streak} times in a row that the work is ready for review, but there is no PR. Please reply how to go on; a reply resumes the work."
+          wait_for_human(task, body, Struct.new(:signature).new("ghwatch"), kind: "human-question", target: :issue)
+          return decide(task, "worker", "no_pr_limit")
+        end
         task.last_error = "worker finished without a pull request; scheduling retry"
         decide(task, "worker", "no_pr")
       end
+
+      # The work needs no change (an investigation that found nothing to do,
+      # or an issue that allows closing with a reason). What the worker found
+      # goes on the issue and a person decides; running it again would only
+      # repeat the same investigation.
+      def hand_findings_over(task, data, outcome)
+        findings = [data["summary"], data["reason"]].map(&:to_s).map(&:strip).reject(&:empty?).uniq.join("\n\n")
+        return retry_without_pull_request(task) if findings.empty? || task.issue_number.nil?
+
+        note = japanese? ? "ワーカーは変更を加えず、PR も作らずに作業を終えました。Issue を閉じるか、どう進めるかを判断してください。返信すると作業を再開します。" :
+          "The worker finished without changing anything or opening a PR. Please decide whether to close the issue or how to go on; a reply resumes the work."
+        wait_for_human(task, "#{findings}\n\n#{note}", outcome, kind: "human-question", target: :issue)
+        decide(task, "worker", "no_change_needed")
+      end
+
+      def japanese? = @config.respond_to?(:human_language) && @config.human_language.to_s.start_with?("ja")
 
       def defer(task, data)
         if task.issue_number
