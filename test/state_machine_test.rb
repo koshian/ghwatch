@@ -108,7 +108,7 @@ class StateMachineTest < Minitest::Test
   def setup
     @github = Github.new
     @worktrees = Worktrees.new
-    @machine = Ghwatch::StateMachine.new(github: @github, config: OpenStruct.new(retry_after: 60),
+    @machine = Ghwatch::StateMachine.new(github: @github, config: OpenStruct.new(retry_after: 60, checks_poll_interval: 60),
       worktrees: @worktrees, log: Ghwatch::Log.new(StringIO.new))
   end
 

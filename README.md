@@ -602,7 +602,8 @@ Worker and finalizer questions remain on the related issue. Existing pending iss
 continue watching their original conversation after an upgrade.
 
 When `require_green_checks = true`, an accepted PR waits in `ready_to_merge` until GitHub checks
-are green and GitHub reports the PR mergeable. A code/review-discussion change invalidates the
+are green and GitHub reports the PR mergeable. It looks at them again every
+`checks_poll_interval` (default `10m`); set it to about how often your CI may finish. A code/review-discussion change invalidates the
 previous review and sends the PR back through review.
 
 ## Default project configuration
@@ -628,6 +629,7 @@ human_language = "auto"
 close_issue_after_merge = true
 screenshot_branch_prefix = "ghwatch-assets/"
 require_green_checks = true
+checks_poll_interval = "10m"
 ```
 
 `human_language` controls human-facing GitHub text for every role, including PR titles

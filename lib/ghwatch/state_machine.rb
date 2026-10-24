@@ -59,6 +59,7 @@ module Ghwatch
     EFFECTS = {
       run_now: "run now",
       retry_later: "retry after `retry_after`",
+      retry_after_checks: "retry after `checks_poll_interval`",
       no_retry: "wait for an event",
       start_wait: "start waiting",
       remember_answer: "give the answer to the next runs",
@@ -120,7 +121,7 @@ module Ghwatch
       },
       "merge" => {
         "pr_changed" => rule("waiting_for_review", :run_now),
-        "pending" => rule(nil, :retry_later),
+        "pending" => rule(nil, :retry_after_checks),
         "manual" => rule(nil, :retry_later),
         "refused" => rule("waiting_for_human_input", :start_wait, resume: "waiting_for_review"),
         "checks_failed" => rule("waiting_for_human_input", :start_wait, resume: "waiting_for_review"),
@@ -450,6 +451,7 @@ module Ghwatch
       case effect
       when :run_now then task.retry_at = Time.now.to_i
       when :retry_later then task.schedule_retry(after: @config.retry_after)
+      when :retry_after_checks then task.schedule_retry(after: @config.checks_poll_interval)
       when :no_retry then task.retry_at = nil
       when :start_wait
         task.metadata["resume_state"] = context.fetch(:resume)

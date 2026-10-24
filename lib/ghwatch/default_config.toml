@@ -26,6 +26,8 @@ close_issue_after_merge = true
 # with this prefix and shown in the request; empty publishes none.
 screenshot_branch_prefix = "ghwatch-assets/"
 require_green_checks = true
+# How often an approved PR waiting for its checks looks at them again.
+checks_poll_interval = "10m"
 
 [triage]
 # Issues unchanged since their last assessment are not judged again until

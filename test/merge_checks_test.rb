@@ -56,7 +56,8 @@ class MergeChecksTest < Minitest::Test
     @task.pr_number = 5
     @task.state = "ready_to_merge"
     @task.last_review_signature = "review"
-    config = OpenStruct.new(auto_merge?: true, reviewer_requires_green_checks?: true, merge_method: "merge", retry_after: 60)
+    config = OpenStruct.new(auto_merge?: true, reviewer_requires_green_checks?: true, merge_method: "merge", retry_after: 600,
+      checks_poll_interval: 60)
     @reviewer = Ghwatch::Actions::Reviewer.new(project: nil, config: config, state: Struct.new(:x) { def save_task(task) = task }.new,
       github: @github, roles: nil, context_builder: nil, human_channel: @human, log: Ghwatch::Log.new(StringIO.new))
   end
@@ -65,7 +66,7 @@ class MergeChecksTest < Minitest::Test
     @reviewer.attempt_merge(@task)
     assert_equal ["h1"], @github.reruns
     assert_equal "ready_to_merge", @task.state
-    assert @task.retry_at
+    assert_in_delta Time.now.to_i + 60, @task.retry_at, 2, "checks are looked at again after checks_poll_interval"
 
     @github.pr["statusCheckRollup"].first["status"] = "IN_PROGRESS"
     @reviewer.attempt_merge(@task)

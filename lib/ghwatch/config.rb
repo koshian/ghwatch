@@ -174,6 +174,11 @@ module Ghwatch
       github.fetch("require_green_checks", true)
     end
 
+    # How long an approved PR waits before its checks are looked at again.
+    def checks_poll_interval
+      Duration.seconds(github.fetch("checks_poll_interval", "10m"))
+    end
+
     private
 
     DEFAULT_RUNNERS = {
