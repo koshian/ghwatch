@@ -182,7 +182,10 @@ module Ghwatch
           "rework": {
             "summary": "for changes_requested: one line on what this round asks to change",
             "main_problem_solved": true,
-            "simplify": "for changes_requested: a narrower scope, a mechanism to drop, or a simpler approach worth considering, or null"
+            "simplify": "for changes_requested: a narrower scope, a mechanism to drop, or a simpler approach worth considering, or null",
+            "theme": "for changes_requested: a few words naming what the blocking findings are about (one mechanism, or one kind of failure path)",
+            "repeats_theme": false,
+            "options": ["when repeats_theme: a direction a person can choose, and what it leaves undone"]
           },
           "reason": "short internal reason"
         }
@@ -191,7 +194,36 @@ module Ghwatch
         With changes_requested, fill rework: main_problem_solved tells whether the problem
         the issue describes is solved by the PR as it stands, apart from the points raised.
         ghwatch keeps one line per round and shows them to the worker, later reviews and the
-        person asked when the rounds run out.
+        person asked when the rounds run out. repeats_theme is true when the previous review
+        round (see the rework rounds in the context) had the same theme. A theme goes back to
+        the worker at most #{StateMachine::THEME_LIMIT - 1} times in a row; on the next one ghwatch asks a person instead.
+        Then fill options with the directions (simplify and continue, narrow the requirement,
+        split the rest into a separate issue, close the PR), each with what it leaves undone.
+
+        Make a finding blocking only when it is
+        (a) a defect or regression this PR introduces or makes worse, or
+        (b) a completion condition of the issue that the PR does not meet.
+        A problem the base branch already has is not blocking, including a pattern the PR
+        only follows (the same synchronous call, the same locking as the existing code).
+        Decide that by reading the base branch's code, not from a general guideline such as
+        "do not block the UI thread", and list it as an existing problem with where it is and
+        how to reproduce it. A rare failure path outside the issue's scope (a settings file
+        that cannot be written, a simulated slow backend) is blocking only when ordinary use
+        loses or corrupts data; otherwise list it for a separate issue with the path and how
+        to reproduce it.
+
+        When earlier rounds added a mechanism or state to answer review points (a background
+        thread, a check on exit), first ask whether it is needed at all and whether a simpler
+        form would do: dropping it, narrowing the requirement, or doing it in one place. If one
+        would, ask for that simplification instead of patching the mechanism's holes. If an
+        earlier finding went too far, say so; you may withdraw it.
+
+        In body, sort what is wrong or risky into three groups: blocking (caused by this PR,
+        or a completion condition not met); existing problems and out of scope, as candidates
+        for separate issues, each with a title, steps to reproduce and the code involved, ready
+        for a person to file (do not file them yourself); and non-blocking. When you narrow the
+        scope, name each finding you leave out and what stays unverified; never drop one
+        silently.
 
         merge means the change is acceptable and all required human verification is already
         satisfied; non-blocking suggestions belong in a merge review's body and are no reason

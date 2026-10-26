@@ -12,6 +12,9 @@ module Ghwatch
     # conflicts do not count) and passes a worker may report `continue` in a
     # row, before a person is asked how to go on.
     REWORK_LIMIT = 3
+    # Review rounds in a row on one theme (one mechanism, one kind of failure
+    # path) before a person is asked instead of patching it again.
+    THEME_LIMIT = 3
     CONTINUE_LIMIT = 3
     # Each round's reason is kept short; the history only has to show where
     # the rounds went.
@@ -38,7 +41,9 @@ module Ghwatch
     #   :review_unless_draft     waiting_for_review unless the PR is a draft
     #   :review_or_continuing    waiting_for_review if a PR exists, else continuing
     #   :rework_or_escalate      changes_requested, or after REWORK_LIMIT
-    #                            rounds a question to a person on the PR
+    #                            rounds, or the THEME_LIMIT-th review round in
+    #                            a row on one theme, a question to a person
+    #                            on the PR
     #   :continuing_or_escalate  continuing, or after CONTINUE_LIMIT passes in
     #                            a row a question to a person
     # resume: for a human wait, the state to return to (:current = the state
@@ -352,7 +357,7 @@ module Ghwatch
       when :continuing_or_keep then "`continuing` (no issue: unchanged)"
       when :review_unless_draft then "`waiting_for_review` (draft: unchanged)"
       when :review_or_continuing then "`waiting_for_review` (no PR: `continuing`)"
-      when :rework_or_escalate then "`changes_requested` (after #{REWORK_LIMIT} rounds: ask a person, resuming `changes_requested`)"
+      when :rework_or_escalate then "`changes_requested` (after #{REWORK_LIMIT} rounds, or instead of review round #{THEME_LIMIT} in a row on one theme: ask a person, resuming `changes_requested`)"
       when :continuing_or_escalate then "`continuing` (after #{CONTINUE_LIMIT} in a row: ask a person, resuming `continuing`)"
       end
       resume = case rule.resume
@@ -372,7 +377,15 @@ module Ghwatch
       Array(task.metadata["rework_history"]).map do |round|
         source = sources.fetch(round["source"], round["source"])
         summary = round["summary"] || (japanese ? "(要約なし)" : "(no summary)")
-        "#{round["round"]}. #{source}: #{summary}"
+        theme = if round["theme"]
+          again = if round["repeats_theme"]
+            japanese ? "、前回と同じ" : ", same as before"
+          else
+            ""
+          end
+          japanese ? " [テーマ: #{round["theme"]}#{again}]" : " [theme: #{round["theme"]}#{again}]"
+        end
+        "#{round["round"]}. #{source}#{theme}: #{summary}"
       end
     end
 
@@ -383,6 +396,18 @@ module Ghwatch
       solved = history.reverse.find { |round| round.key?("main_problem_solved") }&.fetch("main_problem_solved")
       simplify = history.filter_map { |round| round["simplify"] }.uniq
       [solved, simplify]
+    end
+
+    # How many review rounds in a row, the newest included, are on the
+    # newest one's theme. The reviewer says whether a round repeats the one
+    # before; failed checks in between do not break the run.
+    def self.theme_run(rounds)
+      run = 0
+      rounds.reject { |round| round["source"] == "checks" }.reverse_each do |round|
+        run += 1
+        break unless round["repeats_theme"]
+      end
+      run
     end
 
     private
@@ -441,7 +466,8 @@ module Ghwatch
       when :continuing_or_keep then task.issue_number ? "continuing" : nil
       when :review_unless_draft then context[:draft] ? nil : "waiting_for_review"
       when :review_or_continuing then context[:pull_request] ? "waiting_for_review" : "continuing"
-      when :rework_or_escalate then (task.metadata["rework_rounds"].to_i >= REWORK_LIMIT) ? :escalate : "changes_requested"
+      when :rework_or_escalate
+        (task.metadata["rework_rounds"].to_i >= REWORK_LIMIT || theme_streak(task, context) >= THEME_LIMIT) ? :escalate : "changes_requested"
       when :continuing_or_escalate then (task.metadata["continue_streak"].to_i + 1 >= CONTINUE_LIMIT) ? :escalate : "continuing"
       else raise ArgumentError, "unknown target #{to.inspect}"
       end
@@ -497,6 +523,10 @@ module Ghwatch
       end
     end
 
+    def theme_streak(task, context)
+      self.class.theme_run(Array(task.metadata["rework_history"]) + [context[:rework] || {}])
+    end
+
     # Why the PR went back this time. Reviewers and the test judge pass their
     # view as context[:rework]; failed checks are named by the event.
     def record_rework(task, context)
@@ -510,7 +540,10 @@ module Ghwatch
         "source" => entry["source"] || "review",
         "summary" => summary.empty? ? nil : summary,
         "main_problem_solved" => [true, false].include?(entry["main_problem_solved"]) ? entry["main_problem_solved"] : nil,
-        "simplify" => entry["simplify"].to_s.strip.empty? ? nil : entry["simplify"].to_s.strip
+        "simplify" => entry["simplify"].to_s.strip.empty? ? nil : entry["simplify"].to_s.strip,
+        "theme" => entry["theme"].to_s.strip.empty? ? nil : entry["theme"].to_s.strip,
+        "repeats_theme" => (entry["repeats_theme"] == true) || nil,
+        "options" => Array(entry["options"]).map { |option| option.to_s.strip }.reject(&:empty?).then { |options| options.empty? ? nil : options }
       }.compact]
     end
 
@@ -539,17 +572,35 @@ module Ghwatch
       if rework
         history = self.class.rework_history_lines(task, japanese: japanese)
         solved, simplify = self.class.rework_outlook(task)
+        # One theme came up again, whether or not the rounds ran out too.
+        latest = Array(task.metadata["rework_history"]).last || {}
+        theme = latest["theme"] if self.class.theme_run(Array(task.metadata["rework_history"])) >= THEME_LIMIT
+        options = Array(latest["options"])
         if japanese
-          message = "このPRはレビューやCIの指摘で #{REWORK_LIMIT} 回ワーカーに差し戻されましたが、まだ収束していません。" \
-            "このまま続けるか、方針を変えるか、PRを閉じるかを判断してください。返信すると、差し戻しの回数を数え直して作業を再開します。" \
-            "\n\n最後の差し戻しの理由: #{reason}"
+          message = if theme
+            "このPRは、同じテーマ(#{theme})の指摘で #{THEME_LIMIT} 回続けてワーカーに差し戻されるところでした。" \
+              "穴を塞ぐ差し戻しは続けずに、方向を判断してください(単純化して続ける、要件を狭める、別の Issue に分ける、PR を閉じる)。" \
+              "返信すると、差し戻しの回数を数え直して作業を再開します。"
+          else
+            "このPRはレビューやCIの指摘で #{REWORK_LIMIT} 回ワーカーに差し戻されましたが、まだ収束していません。" \
+              "このまま続けるか、方針を変えるか、PRを閉じるかを判断してください。返信すると、差し戻しの回数を数え直して作業を再開します。"
+          end
+          message += "\n\n最後の差し戻しの理由: #{reason}"
+          message += "\n\nレビュアーが挙げた方向と、それぞれで残ること:\n#{options.map { |option| "- #{option}" }.join("\n")}" unless options.empty?
           message += "\n\n差し戻しの経緯:\n#{history.join("\n")}" unless history.empty?
           message += "\n\n本題(Issue の問題)は、レビュアーの見立てでは#{solved ? "解決済みです" : "まだ解決していません"}。" unless solved.nil?
           message += "\n\n単純化の候補:\n#{simplify.map { |idea| "- #{idea}" }.join("\n")}" unless simplify.empty?
         else
-          message = "This PR went back to the worker #{REWORK_LIMIT} times for review changes or failed checks and has not converged. " \
-            "Please decide whether to continue, change the approach, or close the PR. A reply resumes the work with a fresh count." \
-            "\n\nLast reason: #{reason}"
+          message = if theme
+            "This PR was about to go back to the worker for round #{THEME_LIMIT} in a row on one theme (#{theme}). " \
+              "Instead of patching it again, please choose a direction: simplify and continue, narrow the requirement, " \
+              "split the rest into a separate issue, or close the PR. A reply resumes the work with a fresh count."
+          else
+            "This PR went back to the worker #{REWORK_LIMIT} times for review changes or failed checks and has not converged. " \
+              "Please decide whether to continue, change the approach, or close the PR. A reply resumes the work with a fresh count."
+          end
+          message += "\n\nLast reason: #{reason}"
+          message += "\n\nDirections the reviewer sees, and what each leaves:\n#{options.map { |option| "- #{option}" }.join("\n")}" unless options.empty?
           message += "\n\nRework rounds:\n#{history.join("\n")}" unless history.empty?
           message += "\n\nAs the reviewer sees it, the issue's own problem is #{solved ? "solved" : "not solved yet"}." unless solved.nil?
           message += "\n\nWays to simplify:\n#{simplify.map { |idea| "- #{idea}" }.join("\n")}" unless simplify.empty?

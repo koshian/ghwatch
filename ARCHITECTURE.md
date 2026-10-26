@@ -219,7 +219,7 @@ the first one with a rule for the task's group is applied.
 | --- | --- | --- |
 | `branch_updated` | unchanged; run now | The PR was behind its base and was updated; review the new head |
 | `merge` | `ready_to_merge`; run now | Approved; with `auto_merge` off a person merges |
-| `changes_requested` | `changes_requested` (after 3 rounds: ask a person, resuming `changes_requested`); rework: the latest review; count a rework round; run now |  |
+| `changes_requested` | `changes_requested` (after 3 rounds, or instead of review round 3 in a row on one theme: ask a person, resuming `changes_requested`); rework: the latest review; count a rework round; run now |  |
 | `author_changes` | `waiting_for_review`; retry after `retry_after` | Changes requested on a PR ghwatch only reviews; its author makes them |
 | `workspace_diverged` | `waiting_for_human_input`; resumes `waiting_for_review`; start waiting | The task worktree cannot follow the PR head without losing something; ask on the PR |
 | `waiting_for_human_input` | `waiting_for_human_input`; resumes `waiting_for_review`; start waiting |  |
@@ -235,7 +235,7 @@ the first one with a rule for the task's group is applied.
 | Result | Next state and effects | Notes |
 | --- | --- | --- |
 | `passed` | `ready_to_merge`; run now | Everything asked was confirmed, or a maintainer accepted it |
-| `problem` | `changes_requested` (after 3 rounds: ask a person, resuming `changes_requested`); rework: the latest review; count a rework round; run now | The answer reports that the problem remains |
+| `problem` | `changes_requested` (after 3 rounds, or instead of review round 3 in a row on one theme: ask a person, resuming `changes_requested`); rework: the latest review; count a rework round; run now | The answer reports that the problem remains |
 | `author_changes` | `waiting_for_review`; retry after `retry_after` | The problem remains on a PR ghwatch only reviews; its author fixes it |
 | `incomplete` | `waiting_for_human_test`; resumes `checking_test_result`; start waiting | Part of the request is unanswered; ask for that part only |
 | `delegated` | `waiting_for_review`; forget the last review; run now | The person asked ghwatch to do the check itself; the reviewer does it, with their reply |
@@ -278,7 +278,7 @@ the first one with a rule for the task's group is applied.
 | PR not found | — | `continuing` (no issue: unchanged); retry after `retry_after` | `continuing` (no issue: unchanged); retry after `retry_after` | `continuing` (no issue: unchanged); retry after `retry_after` | `continuing` (no issue: unchanged); clear the wait; retry after `retry_after` | — | `continuing` (no issue: unchanged); retry after `retry_after` |
 | PR found | `waiting_for_review` (draft: unchanged); record the PR; run now | — | — | — | unchanged; record the PR | — | — |
 | Conflict with the base | unchanged; run now; only when newly observed | `changes_requested`; rework: conflict; forget the last review; run now; not for PRs ghwatch only reviews | `changes_requested`; rework: conflict; forget the last review; run now; not for PRs ghwatch only reviews | `changes_requested`; rework: conflict; forget the last review; run now; not for PRs ghwatch only reviews | — | — | — |
-| Required checks failed | unchanged; run now; only when newly observed | — | — | `changes_requested` (after 3 rounds: ask a person, resuming `changes_requested`); rework: failed checks; count a rework round; forget the last review; run now; once per PR head; not for PRs ghwatch only reviews | `changes_requested` (after 3 rounds: ask a person, resuming `changes_requested`); clear the wait; rework: failed checks; count a rework round; forget the last review; run now; once per PR head; not for PRs ghwatch only reviews | — | — |
+| Required checks failed | unchanged; run now; only when newly observed | — | — | `changes_requested` (after 3 rounds, or instead of review round 3 in a row on one theme: ask a person, resuming `changes_requested`); rework: failed checks; count a rework round; forget the last review; run now; once per PR head; not for PRs ghwatch only reviews | `changes_requested` (after 3 rounds, or instead of review round 3 in a row on one theme: ask a person, resuming `changes_requested`); clear the wait; rework: failed checks; count a rework round; forget the last review; run now; once per PR head; not for PRs ghwatch only reviews | — | — |
 | Someone pushed to the PR | unchanged; run now | unchanged; run now | `waiting_for_review`; run now; unless only the base was merged in | `waiting_for_review`; run now | `waiting_for_review`; clear the wait; run now; unless only the base was merged in | — | — |
 | A person replied after the question (PR or issue) | — | — | — | — | the interrupted state (`waiting_for_review` for a worker state on a PR ghwatch only reviews); clear the wait; reset the rework and `continue` counts; give the answer to the next runs; run now | the interrupted state (`waiting_for_review` for a worker state on a PR ghwatch only reviews); clear the wait; reset the rework and `continue` counts; give the answer to the next runs; run now | — |
 | New comment or review by a person | unchanged; run now | unchanged; run now | — | `waiting_for_review`; run now | — | — | — |

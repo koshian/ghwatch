@@ -282,7 +282,7 @@ module Ghwatch
 
         rework = data["rework"].is_a?(Hash) ? data["rework"] : {}
         summary = rework["summary"] || data["reason"] || data["body"].to_s.lines.find { |line| !line.strip.empty? }
-        {rework: rework.slice("main_problem_solved", "simplify").merge("source" => source, "summary" => summary)}
+        {rework: rework.slice("main_problem_solved", "simplify", "theme", "repeats_theme", "options").merge("source" => source, "summary" => summary)}
       end
 
       # Someone else's PR: its author makes the changes. The review is not

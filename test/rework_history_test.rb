@@ -29,8 +29,9 @@ class ReworkHistoryTest < Minitest::Test
     @task.state = "waiting_for_review"
   end
 
-  def review(summary, solved: nil, simplify: nil)
-    rework = {"source" => "review", "summary" => summary, "main_problem_solved" => solved, "simplify" => simplify}.compact
+  def review(summary, solved: nil, simplify: nil, theme: nil, repeats: nil, options: nil)
+    rework = {"source" => "review", "summary" => summary, "main_problem_solved" => solved, "simplify" => simplify,
+              "theme" => theme, "repeats_theme" => repeats, "options" => options}.compact
     @machine.apply_result(@task, "reviewer", "changes_requested", rework: rework)
     @task.state = "waiting_for_review" unless @task.state == "waiting_for_human_input"
   end
@@ -95,5 +96,42 @@ class ReworkHistoryTest < Minitest::Test
     assert_equal Ghwatch::StateMachine::REWORK_SUMMARY_LENGTH + 2, round["summary"].length
     refute round.key?("main_problem_solved")
     refute round.key?("simplify")
+  end
+
+  def test_a_third_review_round_in_a_row_on_one_theme_asks_a_person_instead
+    review("saving on quit is lost when the file cannot be written", solved: true, theme: "save on quit")
+    @task.state = "ready_to_merge"
+    @machine.react(@task, {"checks_failed" => {head: "h2", failed: ["CI"]}})
+    @task.state = "waiting_for_review"
+    review("closing twice skips the save", theme: "save on quit", repeats: true)
+    assert_equal "waiting_for_review", @task.state, "twice in a row still goes back to the worker"
+
+    review("Ctrl+Q skips the save", theme: "save on quit", repeats: true,
+      options: ["Save in the one place the app quits: the rare paths stay unsaved", "Close the PR: nothing is saved automatically"])
+    assert_equal "waiting_for_human_input", @task.state
+    assert_equal "changes_requested", @task.metadata["resume_state"]
+    message = @channel.asked.last
+    assert_includes message, "round #{Ghwatch::StateMachine::THEME_LIMIT} in a row on one theme (save on quit)"
+    assert_includes message, "- Save in the one place the app quits: the rare paths stay unsaved"
+    assert_includes message, "3. review [theme: save on quit, same as before]: closing twice skips the save"
+  end
+
+  def test_a_new_theme_starts_a_new_run
+    review("blocks the UI thread", theme: "background save")
+    review("the lock is held while connecting", theme: "background save", repeats: true)
+    review("a completion condition is not met", theme: "dialog")
+    assert_equal "waiting_for_review", @task.state
+    refute_empty @task.metadata["rework_history"]
+    assert_empty @channel.asked
+  end
+
+  def test_reviewers_are_told_what_may_block_and_how_to_report_the_rest
+    contract = Ghwatch::Result.contract_for("deep_reviewer")
+    assert_includes contract, "a defect or regression this PR introduces or makes worse"
+    assert_includes contract, "A problem the base branch already has is not blocking"
+    assert_includes contract, "by reading the base branch's code"
+    assert_includes contract, "first ask whether it is needed at all"
+    assert_includes contract, "existing problems and out of scope"
+    assert_includes contract, "at most #{Ghwatch::StateMachine::THEME_LIMIT - 1} times in a row"
   end
 end

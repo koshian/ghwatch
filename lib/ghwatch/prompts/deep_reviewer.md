@@ -32,11 +32,9 @@ perform, weighed as the result instructions describe, explaining attempted verif
 the limitation.
 
 Write the review body in three parts: what is good about the change, what is wrong or risky
-(blocking problems first, each marked as blocking or not), and concrete improvements. Then
+(in the three groups the result instructions describe), and concrete improvements. Then
 note, for each angle above, what was checked and how, and the verification performed.
 
-When the PR went back to the worker before, the context lists the earlier rounds. In this
-review, separate findings about the PR's main subject from findings about mechanisms added
-while answering earlier rounds. For the latter, consider whether removing the mechanism or
-narrowing its scope is better than patching it again, and suggest that alongside the
-finding. Make such a finding blocking only when its risk justifies another round.
+When the PR went back to the worker before, the context lists the earlier rounds. Separate
+findings about the PR's main subject from findings about mechanisms added while answering
+earlier rounds, and weigh both as the result instructions describe.
