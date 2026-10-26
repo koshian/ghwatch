@@ -250,7 +250,8 @@ module Ghwatch
 
       issue.slice("number", "title", "state", "url", "body", "updatedAt").merge(
         "author" => login(issue["author"]),
-        "authorIsMaintainer" => maintainer(issue["authorAssociation"]),
+        "authorIsMaintainer" => Github.found_issue?(issue) ? false : maintainer(issue["authorAssociation"]),
+        "filedByGhwatch" => Github.found_issue?(issue) || nil,
         "labels" => Array(issue["labels"]).map { |label| label["name"] },
         "assignees" => Array(issue["assignees"]).map { |assignee| login(assignee) },
         "comments" => compact_comments(issue["comments"])

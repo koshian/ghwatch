@@ -76,7 +76,8 @@ module Ghwatch
         needed, with options. ghwatch does not keep a blocked or discussion assessment without
         a comment. Mark it ready only after a maintainer
         (authorIsMaintainer: true) has settled that; a decision from anyone else, including
-        the reporter, does not count. Use skip when a maintainer declined it. A deferred issue
+        the reporter, does not count. An issue filedByGhwatch is a problem a reviewer found
+        while reviewing a PR; filing it decided nothing. Use skip when a maintainer declined it. A deferred issue
         is intentionally waiting for a future dependency or event and should not ask the
         human to repeat a decision already recorded. followup means implementation is not
         the next action, but ghwatch should continue watching for a response or verification.
@@ -171,6 +172,7 @@ module Ghwatch
           "reporter_message": "for waiting_for_human_test with a related issue: the request to the reporter",
           "human_check": "for waiting_for_human_test: screenshots or run",
           "screenshots": [{"path": "image file in the workspace", "caption": "what it shows, for the person"}],
+          "new_issues": [{"title": "issue title", "body": "what happens, steps to reproduce, the code involved, and why it is outside this PR"}],
           "issue": 123,
           "test_preparation": {
             "commit": "full tested commit SHA",
@@ -219,9 +221,12 @@ module Ghwatch
         earlier finding went too far, say so; you may withdraw it.
 
         In body, sort what is wrong or risky into three groups: blocking (caused by this PR,
-        or a completion condition not met); existing problems and out of scope, as candidates
-        for separate issues, each with a title, steps to reproduce and the code involved, ready
-        for a person to file (do not file them yourself); and non-blocking. When you narrow the
+        or a completion condition not met); existing problems and out of scope; and
+        non-blocking. Put each existing or out-of-scope problem worth fixing in new_issues as
+        well, written for the issue's readers: what happens, steps to reproduce, the code
+        involved, and why it is outside this PR. ghwatch files them and links them in the
+        review; do not file them yourself. First search the open issues (gh issue list
+        --search) and name an existing one in body instead of repeating it. When you narrow the
         scope, name each finding you leave out and what stays unverified; never drop one
         silently.
 

@@ -28,6 +28,8 @@ screenshot_branch_prefix = "ghwatch-assets/"
 require_green_checks = true
 # How often an approved PR waiting for its checks looks at them again.
 checks_poll_interval = "10m"
+# File the existing problems reviewers find outside a PR's scope as issues.
+file_found_issues = true
 
 [triage]
 # Issues unchanged since their last assessment are not judged again until

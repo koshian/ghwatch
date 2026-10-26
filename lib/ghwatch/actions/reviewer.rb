@@ -240,7 +240,7 @@ module Ghwatch
       end
 
       def apply_result(task, pull_request, outcome, workspace: nil)
-        data = outcome.data
+        data = with_found_issues(task, outcome.data, outcome)
         initial_signature = @github.review_signature(pull_request)
         task.metadata.delete("commented_review")
 
@@ -323,6 +323,41 @@ module Ghwatch
         end
         decide(task, "test_judge", data["status"], rework_context(data, "test"))
       end
+
+      # Problems the review found outside what the PR causes are filed as
+      # issues, so they outlive the review; each title once per task, and not
+      # when an open issue already has it.
+      def with_found_issues(task, data, outcome)
+        found = Array(data["new_issues"]).select { |issue| issue.is_a?(Hash) && !issue["title"].to_s.strip.empty? && !issue["body"].to_s.strip.empty? }
+        return data if found.empty? || !@config.file_found_issues? || data["body"].to_s.strip.empty?
+
+        filed = task.metadata["found_issues"] ||= {}
+        lines = found.filter_map do |issue|
+          title = issue["title"].strip
+          number = filed[title] || @github.open_issue_titled(title)&.fetch("number") || file_found_issue(task, issue, title, outcome)
+          next unless number
+
+          filed[title] = number
+          "- ##{number} #{title}"
+        end
+        return data if lines.empty?
+
+        heading = japanese? ? "別の Issue にしたもの:" : "Filed as separate issues:"
+        data.merge("body" => "#{data["body"].rstrip}\n\n#{heading}\n#{lines.join("\n")}")
+      end
+
+      def file_found_issue(task, issue, title, outcome)
+        origin = japanese? ? "PR ##{task.pr_number} のレビューで見つかりました。" : "Found while reviewing PR ##{task.pr_number}."
+        number = @github.create_issue(title, "#{issue["body"].rstrip}\n\n#{origin}", kind: Github::FOUND_ISSUE_KIND,
+          model_signature: outcome.signature)
+        @log.info("[#{task.id}] filed issue ##{number}: #{title}")
+        number
+      rescue => e
+        @log.warn("[#{task.id}] could not file the issue #{title.inspect}: #{e.message}")
+        nil
+      end
+
+      def japanese? = @config.respond_to?(:human_language) && @config.human_language.to_s.start_with?("ja")
 
       # The reviewer's screenshots, published and shown under the request. A
       # request to judge by looking that has nothing to look at is not sent:

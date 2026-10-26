@@ -9,6 +9,7 @@ require "uri"
 module Ghwatch
   class Github
     MARKER_PREFIX = "<!-- ghwatch:"
+    FOUND_ISSUE_KIND = "found-issue"
 
     def initialize(project:, command:, log: Log.new)
       @project = project
@@ -45,6 +46,12 @@ module Ghwatch
 
     # viewer: the account ghwatch works as, asked only when the item has
     # assignees.
+    # Filed by a reviewer for a problem it found: a report, not a
+    # maintainer's decision to do the work.
+    def self.found_issue?(issue)
+      issue.is_a?(Hash) && issue["body"].to_s.include?("#{MARKER_PREFIX}#{FOUND_ISSUE_KIND}:")
+    end
+
     def self.hands_off?(item, viewer:)
       return false unless item.is_a?(Hash)
 
@@ -175,6 +182,17 @@ module Ghwatch
       signed_body = human_body(body, marker: marker, model_signature: model_signature)
       gh("pr", "comment", number.to_s, "--body", signed_body)
       marker
+    end
+
+    # Returns the new issue's number.
+    def create_issue(title, body, kind:, model_signature: nil)
+      url = gh("issue", "create", "--title", title, "--body", human_body(body, marker: marker_for(kind), model_signature: model_signature))
+      Integer(url[%r{/issues/(\d+)}, 1])
+    end
+
+    def open_issue_titled(title)
+      issues = gh_json("issue", "list", "--state", "open", "--search", "#{title} in:title", "--json", "number,title", "--limit", "20")
+      issues.find { |issue| issue["title"].strip == title.strip }
     end
 
     def close_issue(number, comment: nil, model_signature: nil)

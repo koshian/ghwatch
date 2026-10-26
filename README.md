@@ -466,7 +466,9 @@ the previously requested changes and the changes since, raising new findings in 
 code only for real defects within the issue's scope. Only a defect or regression the PR
 introduces or worsens, or an unmet completion condition of the issue, blocks a PR. Problems
 the base branch already has, and rare failure paths outside the issue that lose no data in
-ordinary use, are listed as candidates for separate issues. When rework added a mechanism,
+ordinary use, are filed as separate issues and linked in the review (`file_found_issues`,
+default on; an open issue with the same title is linked instead). Triage treats such an issue
+as a report, not a maintainer's decision to do it. When rework added a mechanism,
 reviewers first ask whether a simpler form would do. After two review rounds in a row on one
 theme, ghwatch asks a person to choose a direction instead of sending the PR back a third
 time. Human test requests are posted on the source Issue
@@ -636,6 +638,7 @@ close_issue_after_merge = true
 screenshot_branch_prefix = "ghwatch-assets/"
 require_green_checks = true
 checks_poll_interval = "10m"
+file_found_issues = true
 ```
 
 `human_language` controls human-facing GitHub text for every role, including PR titles

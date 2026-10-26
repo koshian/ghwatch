@@ -113,7 +113,7 @@ module Ghwatch
         "issue" => {
           "number" => issue["number"],
           "title" => issue["title"],
-          "authorIsMaintainer" => maintainer?(issue["authorAssociation"]),
+          "authorIsMaintainer" => !Github.found_issue?(issue) && maintainer?(issue["authorAssociation"]),
           "labels" => Array(issue["labels"]).map { |label| label["name"] },
           "body" => truncate(issue["body"], COMMENT_BYTES * 3),
           "comments" => comments.map do |comment|
