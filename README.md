@@ -362,8 +362,9 @@ validation of builds or evidence. Existing human waits are not migrated.
 
 An answer to the reviewer's test request is not reviewed again: in `checking_test_result`
 the test judge reads it and the PR goes to the merge step when everything asked was
-confirmed, back to the worker when the problem remains, or the person is asked for what is
-missing. Only a PR whose changes differ from the tested head goes back to review; merging
+confirmed, back to the worker when the problem remains or a maintainer asked for code
+changes instead (the check is asked again for the new head), or the person is asked for what
+is missing. Only a PR whose changes differ from the tested head goes back to review; merging
 the base in ("Update branch") neither does that nor ends a wait for a person.
 
 This keeps product decisions, reproduction details, and test reports next to the GitHub work

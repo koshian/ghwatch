@@ -236,6 +236,7 @@ the first one with a rule for the task's group is applied.
 | --- | --- | --- |
 | `passed` | `ready_to_merge`; run now | Everything asked was confirmed, or a maintainer accepted it |
 | `problem` | `changes_requested` (after 3 rounds, or instead of review round 3 in a row on one theme: ask a person, resuming `changes_requested`); rework: the latest review; count a rework round; run now | The answer reports that the problem remains |
+| `changes_requested` | `changes_requested`; rework: the latest review; run now | A maintainer asked for code changes instead of answering the check; the worker makes them, and the check is asked again after the next review. Not counted as a rework round |
 | `author_changes` | `waiting_for_review`; retry after `retry_after` | The problem remains on a PR ghwatch only reviews; its author fixes it |
 | `incomplete` | `waiting_for_human_test`; resumes `checking_test_result`; start waiting | Part of the request is unanswered; ask for that part only |
 | `delegated` | `waiting_for_review`; forget the last review; run now | The person asked ghwatch to do the check itself; the reviewer does it, with their reply |

@@ -134,4 +134,21 @@ class ReworkHistoryTest < Minitest::Test
     assert_includes contract, "existing problems and out of scope"
     assert_includes contract, "at most #{Ghwatch::StateMachine::THEME_LIMIT - 1} times in a row"
   end
+
+  def test_a_maintainer_asking_for_code_changes_during_a_check_sends_the_pr_back_without_a_round
+    @task.state = "checking_test_result"
+    @task.metadata["rework_rounds"] = 2
+    @task.metadata["rework_reason"] = "Resolve conflicts"
+    @machine.apply_result(@task, "test_judge", "changes_requested", rework: {"source" => "test", "summary" => "read the store only when saved"})
+    assert_equal "changes_requested", @task.state
+    assert_equal 2, @task.metadata["rework_rounds"]
+    refute @task.metadata.key?("rework_reason"), "the worker reads what the maintainer asked in the discussion"
+    assert_empty @channel.asked
+  end
+
+  def test_the_test_judge_is_told_not_to_ask_again_when_code_changes_were_asked_for
+    contract = Ghwatch::Result.contract_for("test_judge")
+    assert_includes contract, "passed|problem|changes_requested|incomplete"
+    assert_includes contract, "Never ask the person to check again"
+  end
 end

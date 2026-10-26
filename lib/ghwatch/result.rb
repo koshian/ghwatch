@@ -318,7 +318,7 @@ module Ghwatch
 
         #{START_MARKER}
         {
-          "status": "passed|problem|incomplete|delegated|retry",
+          "status": "passed|problem|changes_requested|incomplete|delegated|retry",
           "body": "for the PR: what was asked, what the person reported, and the decision",
           "reporter_message": "for incomplete with a related issue: the follow-up request to the person",
           "reason": "short internal reason"
@@ -332,7 +332,13 @@ module Ghwatch
         means part of the request is unanswered or the answer is unclear; reporter_message
         then asks for that part only and repeats nothing that was answered. A different
         problem outside the issue is not a problem here: mention it in body for the
-        maintainers. delegated means the person did not answer the check but asked ghwatch
+        maintainers. changes_requested means a maintainer (authorIsMaintainer: true), on the
+        issue or the PR, asked for changes to the code (a new decision, a different approach, a
+        fix) instead of, or as well as, answering the check: the check of this head is no longer
+        what is needed. body then tells the worker what the maintainer asked, linking their
+        comment; the PR goes back to the worker, and the check is asked again for the new head
+        after review. Never ask the person to check again, and never promise a new build
+        yourself, when code changes were asked for. delegated means the person did not answer the check but asked ghwatch
         to do it (try it under Xvfb, take screenshots and show them): you cannot, but the
         reviewer can, so the PR goes back to review with their reply; do not ask them again.
         Use retry only when the answer cannot be read now, for example an attachment that

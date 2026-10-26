@@ -310,7 +310,7 @@ module Ghwatch
         when "passed"
           post_review_body(task, data["body"], outcome, kind: "review-ok")
           task.last_review_signature = refreshed_review_signature(task, fallback: @github.review_signature(pull_request))
-        when "problem"
+        when "problem", "changes_requested"
           post_review_body(task, data.fetch("body"), outcome, kind: "changes-requested")
           return leave_to_author(task, pull_request, "test_judge") if task.metadata["review_only"]
         when "incomplete"
