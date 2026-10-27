@@ -150,5 +150,12 @@ class ReworkHistoryTest < Minitest::Test
     contract = Ghwatch::Result.contract_for("test_judge")
     assert_includes contract, "passed|problem|changes_requested|incomplete"
     assert_includes contract, "Never ask the person to check again"
+    assert_includes contract, "start or rebuild the test build"
+  end
+
+  def test_reviewers_wait_for_the_test_build_they_start
+    contract = Ghwatch::Result.contract_for("reviewer")
+    assert_includes contract, "never cancel a run you\nhave not seen fail"
+    assert_includes contract, "never send one that promises a build"
   end
 end

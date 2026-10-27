@@ -245,6 +245,10 @@ module Ghwatch
         Do not wait for CI and do not return comment or retry only because checks are still
         running: judge the change. ghwatch merges only after the required checks pass and
         sends the PR back to the worker if they fail. Mention unfinished checks in the body.
+        A test build you start for a person is different: wait until it finishes (gh run
+        watch), however long the project's builds usually take, and never cancel a run you
+        have not seen fail. If it fails, read its logs: a cause in the code is changes_requested;
+        a cause outside it (a runner or network failure) is retry, saying what failed.
 
         For development-environment blockers such as missing OS packages, use
         waiting_for_human_input, not changes_requested or waiting_for_human_test. In body,
@@ -291,7 +295,9 @@ module Ghwatch
         can make from images; take the screenshots under Xvfb and list them in screenshots,
         and do not ask for a test build or say how to start one. human_check run: the person
         has to run it (real hardware, IME, HiDPI, their own setup); screenshots may still
-        show what to expect. ghwatch publishes the screenshots and appends them, numbered in
+        show what to expect. Ask for a run only with a test subject they can use now (a
+        finished build's link, or commands to build it); never send one that promises a build
+        later. ghwatch publishes the screenshots and appends them, numbered in
         order, to body and reporter_message, so refer to them by number and say what to look
         at in each. Keep secrets (passwords, tokens, private server names) out of them.
         For waiting_for_human_test, include test_preparation and make body a self-contained
@@ -338,9 +344,11 @@ module Ghwatch
         what is needed. body then tells the worker what the maintainer asked, linking their
         comment; the PR goes back to the worker, and the check is asked again for the new head
         after review. Never ask the person to check again, and never promise a new build
-        yourself, when code changes were asked for. delegated means the person did not answer the check but asked ghwatch
-        to do it (try it under Xvfb, take screenshots and show them): you cannot, but the
-        reviewer can, so the PR goes back to review with their reply; do not ask them again.
+        yourself, when code changes were asked for. delegated means the person did not answer
+        the check but asked ghwatch for something the reviewer can do (try it under Xvfb, take
+        screenshots and show them, start or rebuild the test build), or could not answer
+        because the request had no usable build: you cannot, but the reviewer can, so the PR
+        goes back to review with their reply; do not ask them again or promise it yourself.
         Use retry only when the answer cannot be read now, for example an attachment that
         fails to download.
 
