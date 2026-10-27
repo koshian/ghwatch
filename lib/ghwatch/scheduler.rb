@@ -44,6 +44,8 @@ module Ghwatch
     end
 
     def cycle
+      # Looking at GitHub logs nothing until something changes; say it started.
+      @log.info("checking GitHub")
       steps = [
         -> { reload_config_if_changed },
         -> { @status_labels&.sync_all },
@@ -78,6 +80,7 @@ module Ghwatch
     # What a cycle's first steps found, looked at again. Whatever needs work
     # is scheduled to run now, so the wait that follows ends at once.
     def recheck
+      @log.info("checking GitHub again after a long cycle")
       [
         -> { @task_engine.reconcile_all },
         -> { @review_intake.discover }
