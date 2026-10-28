@@ -250,7 +250,10 @@ module Ghwatch
         waiting_for_human_test with its Actions run id in test_build_runs, and write body and
         reporter_message as the request to post once it is built, without links to the build;
         ghwatch waits for it, adds links to the run and its artifacts, and posts them. Never
-        cancel a run you have not seen fail.
+        cancel a run you have not seen fail. Build for the platforms the person will test on:
+        those they asked for or used in earlier replies, or the ones the check is about; when
+        that is unknown, every platform the project's test build offers. A comment by a person
+        while the build runs sends the PR back to you, so you can start the build they need.
 
         For development-environment blockers such as missing OS packages, use
         waiting_for_human_input, not changes_requested or waiting_for_human_test. In body,

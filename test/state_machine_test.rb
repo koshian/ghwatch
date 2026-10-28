@@ -68,7 +68,7 @@ class StateMachineTest < Minitest::Test
     "pushed" => {worker: "same", review: "same", checking: "waiting_for_review", build: "waiting_for_review", merge: "waiting_for_review",
                  wait_work: "waiting_for_review"},
     "reply" => {wait_work: "waiting_for_review", wait_final: "finalizing"},
-    "activity" => {worker: "same", review: "same", merge: "waiting_for_review"}
+    "activity" => {worker: "same", review: "same", build: "waiting_for_review", merge: "waiting_for_review"}
   }.freeze
 
   RESULTS = {

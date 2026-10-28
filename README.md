@@ -469,8 +469,8 @@ agent running meanwhile. The first look comes after the workflow's usual time (t
 its last ten successful runs, queueing included; five minutes when there are none), then
 every 30 seconds. When the build succeeds, ghwatch posts the reviewer's request with links to
 the run and its artifacts. When it fails, or runs three times its usual time (at least 30
-minutes), the PR goes back to the reviewer, which reads why. A push in the meantime ends the
-wait and the PR is reviewed again.
+minutes), the PR goes back to the reviewer, which reads why. A push or a person's comment in
+the meantime ends the wait and the PR is reviewed again.
 
 Every review pass completes the code review, even when pending CI or test preparation
 already blocks merge, and reports all blocking problems together. Re-reviews first check

@@ -271,6 +271,7 @@ module Ghwatch
       ["activity", "New comment or review by a person", {
         worker: rule(nil, :run_now),
         review: rule(nil, :run_now),
+        build: rule("waiting_for_review", :run_now),
         merge: rule("waiting_for_review", :run_now)
       }]
     ].freeze
