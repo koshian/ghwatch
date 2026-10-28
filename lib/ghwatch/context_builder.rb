@@ -111,11 +111,12 @@ module Ghwatch
         put optional improvements in a non-blocking note.
         You may start the project's CI or test-build workflows for this PR commit yourself,
         for example with gh workflow run on the PR branch; that is not a source change. When
-        human testing needs a test build of the current commit, start it, wait for it (for
-        example with gh run watch), and link the result in the request instead of returning
-        changes_requested for a missing build. If it cannot finish within this run, return
-        retry so ghwatch reviews again later.
-
+        human testing needs a test build of the current commit, use one already finished for
+        it, or start one and do not wait for it: put its run id in test_build_runs. ghwatch
+        waits for the build and posts your request once it is built, with links to the run
+        and its artifacts; if it fails, the PR comes back to you. Do not return
+        changes_requested for a missing build.
+        #{test_build_failure(task)}
         Task state: #{task.state}
         Related issue: #{task.issue_number || "none"}
         Pull request: #{task.pr_number}
@@ -194,6 +195,15 @@ module Ghwatch
       text = "Rework round: #{rounds} of #{StateMachine::REWORK_LIMIT} (after that a person decides how to go on)"
       text += "\nEarlier rework rounds, oldest first:\n#{history.join("\n")}" unless history.empty?
       text
+    end
+
+    def test_build_failure(task)
+      reason = task.metadata["test_build_failure"]
+      return "" unless reason
+
+      "The test build for your last request did not succeed: #{reason}. Read its logs: a cause in " \
+        "the code is changes_requested; a cause outside it (a runner or network failure) means starting " \
+        "the build again and returning the request with the new run in test_build_runs."
     end
 
     # GitHub payloads carry many URLs, ids, reactions and diff hunks that agents

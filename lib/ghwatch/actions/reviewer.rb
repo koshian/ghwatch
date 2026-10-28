@@ -3,9 +3,31 @@
 module Ghwatch
   module Actions
     class Reviewer < Base
-      def initialize(worktrees: nil, **kwargs)
+      def initialize(worktrees: nil, test_builds: nil, **kwargs)
         super(**kwargs)
         @worktrees = worktrees
+        @test_builds = test_builds
+      end
+
+      # The test build the request waited for is done: the request goes out
+      # as the reviewer wrote it, with links to what was built.
+      def announce_test_build(task, status)
+        build = task.metadata.delete("test_build")
+        section = test_build_section(status)
+        data = %w[body reporter_message].to_h { |key| [key, build[key].to_s.strip.empty? ? build[key] : "#{build[key].rstrip}\n\n#{section}"] }
+        @log.info("[#{task.id}] the test build is ready; asking for the test")
+        ask_for_human_test(task, data, Struct.new(:signature).new(build["signature"]))
+        decide(task, "test_build", "ready")
+        @state.save_task(task)
+      end
+
+      # The reviewer reads why on its next run.
+      def test_build_failed(task, reason)
+        task.metadata.delete("test_build")
+        task.metadata["test_build_failure"] = reason
+        @log.info("[#{task.id}] #{reason}; reviewing again")
+        decide(task, "test_build", "failed")
+        @state.save_task(task)
       end
 
       def run(task, role: "reviewer")
@@ -240,6 +262,7 @@ module Ghwatch
       end
 
       def apply_result(task, pull_request, outcome, workspace: nil)
+        task.metadata.delete("test_build_failure")
         data = with_found_issues(task, outcome.data, outcome)
         initial_signature = @github.review_signature(pull_request)
         task.metadata.delete("commented_review")
@@ -262,6 +285,9 @@ module Ghwatch
 
           task.last_review_signature = initial_signature
           task.metadata["human_test_head"] = pull_request["headRefOid"]
+          runs = Array(data["test_build_runs"]).filter_map { |id| Integer(id, exception: false) }
+          return wait_for_test_build(task, role, data, outcome, runs) if !runs.empty? && @test_builds
+
           ask_for_human_test(task, data, outcome)
         when "comment"
           post_review_body(task, data.fetch("body"), outcome, kind: "review-comment")
@@ -382,6 +408,25 @@ module Ghwatch
         task.last_error = "screenshots could not be shown: #{e.message}"
         @log.warn("[#{task.id}] #{task.last_error}; reviewing again")
         nil
+      end
+
+      # The request waits for the build; TestBuildWatcher looks at it.
+      def wait_for_test_build(task, role, data, outcome, runs)
+        task.metadata["test_build"] = @test_builds.plan(runs).merge(
+          "body" => data["body"], "reporter_message" => data["reporter_message"], "signature" => outcome.signature
+        )
+        @log.info("[#{task.id}] waiting for test build run #{runs.join(", ")} before asking for the test")
+        decide(task, role, "test_build")
+      end
+
+      def test_build_section(status)
+        lines = status.runs.map do |run|
+          artifacts = status.artifacts.select { |each_run, _| each_run["id"] == run["id"] }
+            .map { |_, artifact| "  - [#{artifact["name"]}](#{@github.artifact_url(run["id"], artifact["id"])})" }
+          ["- [#{run["display_title"] || run["name"]}](#{run["html_url"]})", *artifacts].join("\n")
+        end
+        heading = japanese? ? "**テストビルド**(取得には GitHub へのログインが必要です)" : "**Test build** (sign in to GitHub to download)"
+        "#{heading}\n#{lines.join("\n")}"
       end
 
       # The review stays on the PR; the reporter gets a request written for

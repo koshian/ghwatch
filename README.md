@@ -167,7 +167,8 @@ Issue carries none of ghwatch's status labels. Removing the mark makes the Issue
 candidate again; a PR of a stopped task stays out of review.
 
 Open PRs that ghwatch works on carry a label from the same set: `implementing` (draft),
-`changes-requested` (the worker is reworking it), `waiting-for-review`, `ready-to-merge`,
+`changes-requested` (the worker is reworking it), `waiting-for-review`, `waiting-for-test-build`,
+`ready-to-merge`,
 `waiting-for-human-input` and `waiting-for-human-test`. PRs without a source Issue are
 labelled too. When the PR merges or closes, or the task moves to another PR, its labels are
 removed. Questions ghwatch asks on a PR mention `github.human_mentions`, or the repository
@@ -460,6 +461,16 @@ such as Xvfb; they cannot edit source, commit, push or merge. Review feedback mu
 the tested SHA, commands, observations and evidence paths. Human requests are limited to
 checks the reviewer cannot perform. Reviewers may start CI or test-build workflows for the
 PR commit, so a missing test build does not by itself send the PR back to the worker.
+
+A reviewer that needs a person to run a test build starts it and does not wait for it: it
+returns the request with the build's Actions run ids, and the task waits in
+`waiting_for_test_build`. A thread of its own looks at those runs, so it is not held up by an
+agent running meanwhile. The first look comes after the workflow's usual time (the median of
+its last ten successful runs, queueing included; five minutes when there are none), then
+every 30 seconds. When the build succeeds, ghwatch posts the reviewer's request with links to
+the run and its artifacts. When it fails, or runs three times its usual time (at least 30
+minutes), the PR goes back to the reviewer, which reads why. A push in the meantime ends the
+wait and the PR is reviewed again.
 
 Every review pass completes the code review, even when pending CI or test preparation
 already blocks merge, and reports all blocking problems together. Re-reviews first check

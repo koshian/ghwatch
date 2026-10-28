@@ -25,6 +25,7 @@ module Ghwatch
     GROUPS = {
       worker: "Worker states",
       review: "`waiting_for_review`",
+      build: "`waiting_for_test_build`",
       checking: "`checking_test_result`",
       merge: "`ready_to_merge`",
       wait_work: "Wait (work)",
@@ -108,11 +109,16 @@ module Ghwatch
         "workspace_diverged" => rule("waiting_for_human_input", :start_wait, resume: "waiting_for_review"),
         "waiting_for_human_input" => rule("waiting_for_human_input", :start_wait, resume: "waiting_for_review"),
         "waiting_for_human_test" => rule("waiting_for_human_test", :start_wait, resume: "checking_test_result"),
+        "test_build" => rule("waiting_for_test_build", :no_retry),
         "comment" => rule(nil, :retry_later),
         "retry" => rule(nil, :retry_later),
         "already_reviewed" => rule(nil, :retry_later),
         "pr_changed" => rule(nil, :retry_later),
         "failed" => rule(nil, :retry_later)
+      },
+      "test_build" => {
+        "ready" => rule("waiting_for_human_test", :start_wait, resume: "checking_test_result"),
+        "failed" => rule("waiting_for_review", :reset_review, :run_now)
       },
       "test_judge" => {
         "passed" => rule("ready_to_merge", :run_now),
@@ -160,6 +166,9 @@ module Ghwatch
       ["reviewer", "author_changes"] => "Changes requested on a PR ghwatch only reviews; its author makes them",
       ["reviewer", "workspace_diverged"] => "The task worktree cannot follow the PR head without losing something; ask on the PR",
       ["test_judge", "author_changes"] => "The problem remains on a PR ghwatch only reviews; its author fixes it",
+      ["reviewer", "test_build"] => "A person must run a test build the reviewer started; the request is posted once it is built",
+      ["test_build", "ready"] => "The test build succeeded; the reviewer's request is posted with its links",
+      ["test_build", "failed"] => "The test build failed or did not finish in time; the reviewer reads why",
       ["reviewer", "merge"] => "Approved; with `auto_merge` off a person merges",
       ["reviewer", "comment"] => "Non-blocking; the same head is not reviewed again until something changes",
       ["reviewer", "already_reviewed"] => "Nothing changed since the last review of this head",
@@ -189,6 +198,7 @@ module Ghwatch
         worker: rule(:finalizing_or_done, :clear_wait, :reset_rounds, :cleanup_review, :run_now),
         review: rule(:finalizing_or_done, :clear_wait, :reset_rounds, :cleanup_review, :run_now),
         checking: rule(:finalizing_or_done, :clear_wait, :reset_rounds, :cleanup_review, :run_now),
+        build: rule(:finalizing_or_done, :clear_wait, :reset_rounds, :cleanup_review, :run_now),
         merge: rule(:finalizing_or_done, :clear_wait, :reset_rounds, :cleanup_review, :run_now),
         wait_work: rule(:finalizing_or_done, :clear_wait, :reset_rounds, :cleanup_review, :run_now)
       }],
@@ -196,6 +206,7 @@ module Ghwatch
         worker: rule("done", :clear_wait, :abandon_pr),
         review: rule("done", :clear_wait, :abandon_pr),
         checking: rule("done", :clear_wait, :abandon_pr),
+        build: rule("done", :clear_wait, :abandon_pr),
         merge: rule("done", :clear_wait, :abandon_pr),
         wait_work: rule("done", :clear_wait, :abandon_pr),
         wait_final: rule("done", :clear_wait, :cleanup),
@@ -205,6 +216,7 @@ module Ghwatch
         worker: rule("done", :clear_wait, :hand_off, :cleanup),
         review: rule("done", :clear_wait, :hand_off, :cleanup),
         checking: rule("done", :clear_wait, :hand_off, :cleanup),
+        build: rule("done", :clear_wait, :hand_off, :cleanup),
         merge: rule("done", :clear_wait, :hand_off, :cleanup),
         wait_work: rule("done", :clear_wait, :hand_off, :cleanup),
         wait_final: rule("done", :clear_wait, :hand_off, :cleanup),
@@ -214,12 +226,14 @@ module Ghwatch
         worker: rule(:implementing_or_done, :clear_wait, :reset_rounds, :forget_pr, :cleanup_review, :run_now),
         review: rule(:implementing_or_done, :clear_wait, :reset_rounds, :forget_pr, :cleanup_review, :run_now),
         checking: rule(:implementing_or_done, :clear_wait, :reset_rounds, :forget_pr, :cleanup_review, :run_now),
+        build: rule(:implementing_or_done, :clear_wait, :reset_rounds, :forget_pr, :cleanup_review, :run_now),
         merge: rule(:implementing_or_done, :clear_wait, :reset_rounds, :forget_pr, :cleanup_review, :run_now),
         wait_work: rule(:implementing_or_done, :clear_wait, :reset_rounds, :forget_pr, :cleanup_review, :run_now)
       }],
       ["pr_missing", "PR not found", {
         review: rule(:continuing_or_keep, :retry_later),
         checking: rule(:continuing_or_keep, :retry_later),
+        build: rule(:continuing_or_keep, :retry_later),
         merge: rule(:continuing_or_keep, :retry_later),
         wait_work: rule(:continuing_or_keep, :clear_wait, :retry_later),
         finalizing: rule(:continuing_or_keep, :retry_later)
@@ -232,6 +246,7 @@ module Ghwatch
         worker: rule(nil, :run_now, guard: :new),
         review: rule("changes_requested", :rework_conflict, :reset_review, :run_now, guard: :worker_may_push),
         checking: rule("changes_requested", :rework_conflict, :reset_review, :run_now, guard: :worker_may_push),
+        build: rule("changes_requested", :rework_conflict, :reset_review, :run_now, guard: :worker_may_push),
         merge: rule("changes_requested", :rework_conflict, :reset_review, :run_now, guard: :worker_may_push)
       }],
       ["checks_failed", "Required checks failed", {
@@ -245,6 +260,7 @@ module Ghwatch
         worker: rule(nil, :run_now),
         review: rule(nil, :run_now),
         checking: rule("waiting_for_review", :run_now, guard: :changes_pr),
+        build: rule("waiting_for_review", :run_now, guard: :changes_pr),
         merge: rule("waiting_for_review", :run_now),
         wait_work: rule("waiting_for_review", :clear_wait, :run_now, guard: :changes_pr)
       }],
@@ -269,6 +285,7 @@ module Ghwatch
       case task.state
       when *WORKER_STATES then :worker
       when "waiting_for_review" then :review
+      when "waiting_for_test_build" then :build
       when "checking_test_result" then :checking
       when "ready_to_merge" then :merge
       when *Task::HUMAN_STATES

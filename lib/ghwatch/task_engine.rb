@@ -8,7 +8,7 @@ module Ghwatch
     RECONCILE_INTERVAL = 60
 
     def initialize(state:, github:, human_channel:, worker_action:, reviewer_action:, finalizer_action:, config:,
-      worktrees: nil, log: Log.new, machine: nil, observer: nil)
+      worktrees: nil, log: Log.new, machine: nil, observer: nil, build_lock: nil)
       @state = state
       @github = github
       @human_channel = human_channel
@@ -21,6 +21,7 @@ module Ghwatch
       @machine = machine || StateMachine.new(github: github, config: config, worktrees: worktrees,
         human_channel: human_channel.respond_to?(:wait) ? human_channel : nil, log: log)
       @observer = observer || Observer.new(github: github, config: config)
+      @build_lock = build_lock
     end
 
     def reconcile_all
@@ -134,7 +135,15 @@ module Ghwatch
       @state.tasks.reject(&:done?)
     end
 
+    # A task waiting for its test build is TestBuildWatcher's too: look at
+    # it under the shared lock, as it is now.
     def reconcile(task)
+      return reconcile_now(task) unless @build_lock && task.state == TestBuildWatcher::STATE
+
+      @build_lock.synchronize { reconcile_now(@state.task(task.id) || task) }
+    end
+
+    def reconcile_now(task)
       snapshot = TaskSnapshot.capture(task: task, github: @github)
       mark_review_only(task, snapshot.pull_request)
       @machine.react(task, @observer.events(task, snapshot))
@@ -182,7 +191,7 @@ module Ghwatch
     end
 
     def action_due?(task)
-      return false if task.waiting_for_human?
+      return false if task.waiting_for_human? || task.state == TestBuildWatcher::STATE
       return true if task.retry_at.nil? && %w[implementing changes_requested continuing finalizing].include?(task.state)
 
       task.retry_due?

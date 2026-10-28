@@ -9,7 +9,7 @@ module Ghwatch
     RECHECK_AFTER = 60
 
     def initialize(task_engine:, review_intake:, issue_triage:, config:, github:, status_labels: nil, log: Log.new,
-      self_update: nil, argv: [])
+      self_update: nil, argv: [], test_build_watcher: nil)
       @task_engine = task_engine
       @review_intake = review_intake
       @issue_triage = issue_triage
@@ -19,6 +19,7 @@ module Ghwatch
       @log = log
       @self_update = self_update
       @argv = argv
+      @test_build_watcher = test_build_watcher
       @running = true
       @wakeup_reader, @wakeup_writer = IO.pipe
     end
@@ -29,6 +30,7 @@ module Ghwatch
       # Changes found here happened while ghwatch was not running, e.g. an
       # interrupted git command.
       @task_engine.audit_review_workspaces(trigger: "at ghwatch startup")
+      @test_build_watcher&.start
 
       while @running
         started = Time.now
@@ -40,6 +42,7 @@ module Ghwatch
         return restart if updated?
       end
 
+      @test_build_watcher&.stop
       @log.info("ghwatch stopped")
     end
 
@@ -138,6 +141,7 @@ module Ghwatch
 
     def restart
       @log.info("a new ghwatch was installed; restarting into it")
+      @test_build_watcher&.stop
       @self_update.restart(@argv)
     end
 

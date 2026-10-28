@@ -172,6 +172,7 @@ module Ghwatch
           "reporter_message": "for waiting_for_human_test with a related issue: the request to the reporter",
           "human_check": "for waiting_for_human_test: screenshots or run",
           "screenshots": [{"path": "image file in the workspace", "caption": "what it shows, for the person"}],
+          "test_build_runs": [123456789],
           "new_issues": [{"title": "issue title", "body": "what happens, steps to reproduce, the code involved, and why it is outside this PR"}],
           "issue": 123,
           "test_preparation": {
@@ -245,10 +246,11 @@ module Ghwatch
         Do not wait for CI and do not return comment or retry only because checks are still
         running: judge the change. ghwatch merges only after the required checks pass and
         sends the PR back to the worker if they fail. Mention unfinished checks in the body.
-        A test build you start for a person is different: wait until it finishes (gh run
-        watch), however long the project's builds usually take, and never cancel a run you
-        have not seen fail. If it fails, read its logs: a cause in the code is changes_requested;
-        a cause outside it (a runner or network failure) is retry, saying what failed.
+        Do not wait for a test build you start for a person either: return
+        waiting_for_human_test with its Actions run id in test_build_runs, and write body and
+        reporter_message as the request to post once it is built, without links to the build;
+        ghwatch waits for it, adds links to the run and its artifacts, and posts them. Never
+        cancel a run you have not seen fail.
 
         For development-environment blockers such as missing OS packages, use
         waiting_for_human_input, not changes_requested or waiting_for_human_test. In body,
@@ -295,9 +297,9 @@ module Ghwatch
         can make from images; take the screenshots under Xvfb and list them in screenshots,
         and do not ask for a test build or say how to start one. human_check run: the person
         has to run it (real hardware, IME, HiDPI, their own setup); screenshots may still
-        show what to expect. Ask for a run only with a test subject they can use now (a
-        finished build's link, or commands to build it); never send one that promises a build
-        later. ghwatch publishes the screenshots and appends them, numbered in
+        show what to expect. Ask for a run only with a test subject: a finished build's link,
+        a build in test_build_runs, or commands to build it; never write that a build will
+        follow later. ghwatch publishes the screenshots and appends them, numbered in
         order, to body and reporter_message, so refer to them by number and say what to look
         at in each. Keep secrets (passwords, tokens, private server names) out of them.
         For waiting_for_human_test, include test_preparation and make body a self-contained

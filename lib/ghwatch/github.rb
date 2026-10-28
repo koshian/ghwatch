@@ -184,6 +184,22 @@ module Ghwatch
       marker
     end
 
+    def workflow_run(id)
+      gh_api("repos/#{repo_name}/actions/runs/#{Integer(id)}")
+    end
+
+    def successful_workflow_runs(workflow_id, limit:)
+      gh_api("repos/#{repo_name}/actions/workflows/#{Integer(workflow_id)}/runs?status=success&per_page=#{limit}").fetch("workflow_runs", [])
+    end
+
+    def run_artifacts(id)
+      gh_api("repos/#{repo_name}/actions/runs/#{Integer(id)}/artifacts?per_page=100").fetch("artifacts", [])
+    end
+
+    def artifact_url(run_id, artifact_id)
+      "https://github.com/#{repo_name}/actions/runs/#{run_id}/artifacts/#{artifact_id}"
+    end
+
     # Returns the new issue's number.
     def create_issue(title, body, kind:, model_signature: nil)
       url = gh("issue", "create", "--title", title, "--body", human_body(body, marker: marker_for(kind), model_signature: model_signature))
