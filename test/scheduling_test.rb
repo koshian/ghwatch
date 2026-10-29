@@ -54,7 +54,11 @@ class SchedulingTest < Minitest::Test
     def github.pull_request_for_branch(branch, since: nil) = nil
     def github.review_signature(pr) = "review"
     engine = Ghwatch::TaskEngine.new(
-      state: Struct.new(:tasks) { def save_task(task) = task }.new([issue, waiting, rework, later]), github: github,
+      state: Struct.new(:tasks) {
+        def save_task(task) = task
+
+        def task(id) = tasks.find { |task| task.id == id }
+      }.new([issue, waiting, rework, later]), github: github,
       human_channel: nil, worker_action: worker, reviewer_action: nil,
       finalizer_action: nil, config: OpenStruct.new(retry_after: 60), log: Ghwatch::Log.new(StringIO.new)
     )
@@ -77,7 +81,11 @@ class SchedulingTest < Minitest::Test
     def github.issue_signature(issue) = "issue"
     def github.pull_request_for_branch(branch, since: nil) = nil
     engine = Ghwatch::TaskEngine.new(
-      state: Struct.new(:tasks) { def save_task(task) = task }.new([first, second]), github: github,
+      state: Struct.new(:tasks) {
+        def save_task(task) = task
+
+        def task(id) = tasks.find { |task| task.id == id }
+      }.new([first, second]), github: github,
       human_channel: nil, worker_action: worker, reviewer_action: nil,
       finalizer_action: nil, config: OpenStruct.new(retry_after: 60), log: Ghwatch::Log.new(StringIO.new)
     )

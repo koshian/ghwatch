@@ -33,6 +33,7 @@ class ReviewWorkspaceTest < Minitest::Test
     @state.define_singleton_method(:save_task) { |task| task }
     task = @task
     @state.define_singleton_method(:tasks) { [task] }
+    @state.define_singleton_method(:task) { |id| (id == task.id) ? task : nil }
   end
 
   def test_reviewer_uses_prepared_workspace_and_discards_result_when_head_changes

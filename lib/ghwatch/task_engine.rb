@@ -6,9 +6,15 @@ module Ghwatch
     # Between actions, everything is looked at again when this much time has
     # passed, so a reply on one task is not stuck behind a backlog of others.
     RECONCILE_INTERVAL = 60
+    # With parallel_review, each lane runs its own tasks' actions on a thread
+    # of its own; without it, one loop runs them all.
+    LANES = {
+      worker: Task::WORKER_STATES,
+      review: %w[waiting_for_review checking_test_result ready_to_merge finalizing]
+    }.freeze
 
     def initialize(state:, github:, human_channel:, worker_action:, reviewer_action:, finalizer_action:, config:,
-      worktrees: nil, log: Log.new, machine: nil, observer: nil, build_lock: nil)
+      worktrees: nil, log: Log.new, machine: nil, observer: nil, locks: TaskLocks.new)
       @state = state
       @github = github
       @human_channel = human_channel
@@ -21,7 +27,7 @@ module Ghwatch
       @machine = machine || StateMachine.new(github: github, config: config, worktrees: worktrees,
         human_channel: human_channel.respond_to?(:wait) ? human_channel : nil, log: log)
       @observer = observer || Observer.new(github: github, config: config)
-      @build_lock = build_lock
+      @locks = locks
     end
 
     def reconcile_all
@@ -42,8 +48,12 @@ module Ghwatch
       end
     end
 
-    def next_retry_at
-      active_tasks.reject(&:waiting_for_human?).filter_map(&:retry_at).min
+    def next_retry_at(lane: nil)
+      active_tasks.select { |task| in_lane?(task, lane) }.reject(&:waiting_for_human?).filter_map(&:retry_at).min
+    end
+
+    def due?(lane: nil)
+      active_tasks.any? { |task| in_lane?(task, lane) && action_due?(task) }
     end
 
     # Runs agent work one action at a time, choosing again before every
@@ -52,22 +62,25 @@ module Ghwatch
     # Age is the number of the issue a task came from (the PR's for an
     # external PR); GitHub numbers issues and PRs in one sequence.
     # look_again runs with each of those looks, for what else GitHub may
-    # have (new PRs).
-    def run_due(stop_requested: -> { false }, scope: :all, look_again: -> {})
+    # have (new PRs). A lane runs only its own tasks and leaves the looks to
+    # the scheduler. Returns how many actions ran.
+    def run_due(stop_requested: -> { false }, scope: :all, look_again: -> {}, lane: nil)
       raise ArgumentError, "unknown task scope #{scope.inspect}" unless %i[all pull_requests issues].include?(scope)
+      raise ArgumentError, "unknown lane #{lane.inspect}" unless lane.nil? || LANES.key?(lane)
 
       actions = Hash.new(0)
       until stop_requested.call
-        if actions.any? && (@reconciled_at.nil? || Time.now - @reconciled_at >= RECONCILE_INTERVAL)
+        if lane.nil? && actions.any? && (@reconciled_at.nil? || Time.now - @reconciled_at >= RECONCILE_INTERVAL)
           reconcile_all
           look_again.call
         end
-        task = active_tasks.select { |candidate| in_scope?(candidate, scope) && actions[candidate.id] < MAX_ACTIONS_PER_TASK && action_due?(candidate) }
-          .min_by { |candidate| [age(candidate), candidate.id] }
+        task = active_tasks.select do |candidate|
+          in_scope?(candidate, scope) && in_lane?(candidate, lane) && actions[candidate.id] < MAX_ACTIONS_PER_TASK && action_due?(candidate)
+        end.min_by { |candidate| [age(candidate), candidate.id] }
         break unless task
 
         actions[task.id] += 1
-        run_task_safely(task, stop_requested: stop_requested)
+        run_task_safely(task, lane: lane)
       end
       # A task that used up its actions in this call waits for the next poll
       # instead of starting over immediately.
@@ -77,6 +90,7 @@ module Ghwatch
         task.schedule_retry(after: @config.retry_after)
         @state.save_task(task)
       end
+      actions.values.sum
     end
 
     def self.age(task) = task.issue_number || task.pr_number || Float::INFINITY
@@ -93,8 +107,17 @@ module Ghwatch
       end
     end
 
-    def run_task_safely(task, stop_requested:)
-      run_task(task)
+    def in_lane?(task, lane)
+      lane.nil? || LANES.fetch(lane).include?(task.state)
+    end
+
+    # Under the task's lock, as the task is now: another thread may have
+    # moved it on since it was chosen.
+    def run_task_safely(task, lane:)
+      @locks.synchronize(task.id) do
+        task = @state.task(task.id) || task
+        run_task(task) if in_lane?(task, lane)
+      end
     rescue => e
       @log.error("task #{task.id} action failed: #{e.class}: #{e.message}")
       task.last_error = e.message
@@ -105,7 +128,7 @@ module Ghwatch
     # One action. What happened since the last look decides first; it may
     # make the action unnecessary or a different one.
     def run_task(task)
-      reconcile(task) if task.pr_number || task.review_state? || task.state == "finalizing"
+      reconcile_now(task) if task.pr_number || task.review_state? || task.state == "finalizing"
       return if task.done? || !action_due?(task)
 
       previous_state = task.state
@@ -135,12 +158,10 @@ module Ghwatch
       @state.tasks.reject(&:done?)
     end
 
-    # A task waiting for its test build is TestBuildWatcher's too: look at
-    # it under the shared lock, as it is now.
+    # A task another thread is acting on is left to it: its action looks at
+    # GitHub first anyway.
     def reconcile(task)
-      return reconcile_now(task) unless @build_lock && task.state == TestBuildWatcher::STATE
-
-      @build_lock.synchronize { reconcile_now(@state.task(task.id) || task) }
+      @locks.try(task.id) { reconcile_now(@state.task(task.id) || task) }
     end
 
     def reconcile_now(task)

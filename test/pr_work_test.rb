@@ -27,6 +27,8 @@ class PrWorkTest < Minitest::Test
     def initialize(tasks) = @tasks = tasks
 
     def save_task(task) = task
+
+    def task(id) = tasks.find { |task| task.id == id }
   end
 
   class Action

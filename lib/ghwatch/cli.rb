@@ -153,9 +153,9 @@ module Ghwatch
       worker_action = Actions::Worker.new(worktrees: worktrees, command: command, **shared_action_dependencies)
       test_builds = TestBuilds.new(github: github)
       reviewer_action = Actions::Reviewer.new(worktrees: worktrees, test_builds: test_builds, **shared_action_dependencies)
-      build_lock = Mutex.new
+      locks = TaskLocks.new
       test_build_watcher = TestBuildWatcher.new(state: state, reviewer: reviewer_action, test_builds: test_builds,
-        lock: build_lock, log: log)
+        locks: locks, log: log)
       finalizer_action = Actions::Finalizer.new(worktrees: worktrees, **shared_action_dependencies)
       task_engine = TaskEngine.new(
         state: state,
@@ -167,7 +167,7 @@ module Ghwatch
         worktrees: worktrees,
         config: config,
         log: log,
-        build_lock: build_lock
+        locks: locks
       )
       scheduler = Scheduler.new(
         task_engine: task_engine,

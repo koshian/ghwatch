@@ -66,7 +66,7 @@ class TestBuildTest < Minitest::Test
     @reviewer = Ghwatch::Actions::Reviewer.new(project: nil, config: config, state: @state, github: @github, roles: nil,
       context_builder: nil, human_channel: @human, log: Ghwatch::Log.new(StringIO.new), test_builds: @test_builds)
     @watcher = Ghwatch::TestBuildWatcher.new(state: @state, reviewer: @reviewer, test_builds: @test_builds,
-      lock: Mutex.new, log: Ghwatch::Log.new(StringIO.new), clock: -> { @now })
+      locks: Ghwatch::TaskLocks.new, log: Ghwatch::Log.new(StringIO.new), clock: -> { @now })
     @task = Ghwatch::Task.for_issue(656, branch: "b", worktree: nil)
     @task.pr_number = 663
     @task.state = "waiting_for_review"

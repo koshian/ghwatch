@@ -86,6 +86,12 @@ module Ghwatch
       Duration.seconds(project.fetch("retry_after", "10m"))
     end
 
+    # Reviews, merges and finalizing run beside the worker instead of
+    # waiting for it.
+    def parallel_review?
+      project.fetch("parallel_review", false) == true
+    end
+
     def max_workers
       Integer(project.fetch("max_workers", 2))
     end

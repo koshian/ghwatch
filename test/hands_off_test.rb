@@ -46,6 +46,8 @@ class HandsOffTest < Minitest::Test
 
     def save_task(task) = @saved << task.pr_number
 
+    def task(id) = tasks.find { |task| task.id == id }
+
     def assessment(number) = nil
   end
 

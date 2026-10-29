@@ -395,6 +395,16 @@ waiting for review does not block another issue from starting.
 Between actions, at most once a minute, ghwatch looks at its tasks on GitHub again and
 looks for new PRs, so a long backlog of agent work does not hide them until the cycle ends.
 
+With `parallel_review = true` in `[project]`, actions run on two lanes at once: the worker
+lane (implementing, rework and issue triage) and the review lane (reviews, test results,
+merges and finalizing), so a review or a merge does not wait for a long worker run. Each lane
+takes its oldest due task, as above. The main thread only looks at GitHub (every minute while
+an agent runs, otherwise every `poll_interval`) and wakes the lanes. A task is acted on by one
+thread at a time, and the look at GitHub leaves alone a task an agent is working on; git
+commands on the repository run one at a time. With `-v`, one spinner line shows every agent
+running. A new install, or INT, takes over once both lanes have finished their current
+action. The setting is read at startup.
+
 Each cycle discovers and processes existing PR tasks before triaging issues and running
 tasks without a PR. PR rework, review, merging and finalization take precedence over new
 issue implementation. Human waits and future retries are still respected, so a blocked PR
@@ -635,6 +645,7 @@ Run `ghwatch init` to get the exact current defaults. The main knobs are:
 poll_interval = "10m"
 retry_after = "10m"
 max_workers = 2
+parallel_review = false
 candidate_limit = 20
 worktree_root = ".worktrees"
 human_wait_cleanup = "git clean -fdX"

@@ -31,6 +31,7 @@ module Ghwatch
       # interrupted git command.
       @task_engine.audit_review_workspaces(trigger: "at ghwatch startup")
       @test_build_watcher&.start
+      return run_lanes if @config.parallel_review?
 
       while @running
         started = Time.now
@@ -70,6 +71,55 @@ module Ghwatch
     end
 
     private
+
+    # parallel_review: the worker lane and the review lane run actions on
+    # threads of their own. This thread only looks at GitHub, every
+    # RECHECK_AFTER while an agent runs, and wakes them.
+    def run_lanes
+      lanes = [
+        Lane.new(name: :worker, task_engine: @task_engine, log: @log, after: ->(actions) { triage_after(actions) }),
+        Lane.new(name: :review, task_engine: @task_engine, log: @log)
+      ]
+      lanes.each(&:start)
+      while @running && !updated?
+        look_at_github
+        lanes.each(&:wake)
+        wait(lanes.any?(&:busy?) ? RECHECK_AFTER : @config.poll_interval, retries: false)
+      end
+      # A new install takes over once no agent runs.
+      @log.info("waiting for the running agents to finish") if lanes.any?(&:busy?)
+      lanes.each(&:stop)
+      lanes.each(&:join)
+      return restart if updated?
+
+      @test_build_watcher&.stop
+      @log.info("ghwatch stopped")
+    end
+
+    def look_at_github
+      @log.info("checking GitHub")
+      [
+        -> { reload_config_if_changed },
+        -> { @status_labels&.sync_all },
+        -> { @task_engine.reconcile_all },
+        -> { @review_intake.discover }
+      ].each do |step|
+        break unless @running
+
+        step.call
+      end
+    rescue => e
+      @log.error("looking at GitHub failed: #{e.class}: #{e.message}")
+    end
+
+    # The worker lane looks for issues once it has run what was due, at most
+    # once a poll unless it just finished some work.
+    def triage_after(actions)
+      return unless actions.positive? || @triaged_at.nil? || Time.now - @triaged_at >= @config.poll_interval
+
+      @triaged_at = Time.now
+      @issue_triage.run
+    end
 
     # A long cycle may have missed new PRs, replies and pushes made while
     # agents ran; look again so they do not wait out a whole poll.
@@ -114,8 +164,8 @@ module Ghwatch
 
     # Sleeps for the poll interval, but returns as soon as a stop is requested.
     # A trapped signal does not interrupt Kernel#sleep, so wait on a self-pipe.
-    def wait(seconds)
-      retry_at = @task_engine.next_retry_at
+    def wait(seconds, retries: true)
+      retry_at = retries && @task_engine.next_retry_at
       if retry_at
         retry_delay = [retry_at - Time.now.to_i, 1].max
         seconds = [seconds, retry_delay].min

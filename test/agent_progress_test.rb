@@ -20,6 +20,19 @@ class AgentProgressTest < Minitest::Test
     assert io.string.end_with?("\r\e[2K")
   end
 
+  def test_agents_running_at_once_share_one_spinner_line
+    io = Terminal.new
+    worker = Ghwatch::AgentProgress.new(label: "[worker] [issue-1]", io: io)
+    reviewer = Ghwatch::AgentProgress.new(label: "[reviewer] [issue-2]", io: io)
+    reviewer.tick
+    assert_includes io.string, "| [worker] [issue-1] running (0s) · [reviewer] [issue-2] running (0s)"
+    worker.finish
+    reviewer.tick
+    assert io.string.end_with?("/ [reviewer] [issue-2] running (0s)")
+  ensure
+    reviewer&.finish
+  end
+
   def test_non_terminal_output_has_no_spinner_and_flushes_partial_lines
     io = StringIO.new
     progress = Ghwatch::AgentProgress.new(label: "[reviewer]", io: io)
@@ -75,6 +88,8 @@ class AgentProgressTest < Minitest::Test
       command.expect(:run, result) do |*args, **options|
         if verbose
           assert_instance_of Ghwatch::AgentProgress, options.fetch(:progress)
+          # Command#run finishes it; the mock stands in for that.
+          options.fetch(:progress).finish
         else
           refute options.key?(:progress)
         end

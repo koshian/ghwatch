@@ -2,6 +2,7 @@
 
 require "fileutils"
 require "find"
+require "monitor"
 require "time"
 
 module Ghwatch
@@ -9,6 +10,9 @@ module Ghwatch
     WORKSPACE_CHANGE_RECORDS = 5
     SCREENSHOT_TYPES = %w[.png .jpg .jpeg .gif .webp].freeze
     SCREENSHOT_LIMIT = 10 * 1024 * 1024
+    # The lanes share the repository: one git command on it at a time, so
+    # two of them do not race for its locks.
+    GIT_LOCK = Monitor.new
 
     class ScreenshotError < StandardError; end
 
@@ -492,7 +496,7 @@ module Ghwatch
     end
 
     def git_result(*args, stdin: nil)
-      @command.run("git", *args, chdir: @project.root, timeout: 300, stdin: stdin)
+      GIT_LOCK.synchronize { @command.run("git", *args, chdir: @project.root, timeout: 300, stdin: stdin) }
     end
 
     def change_id(base, head)

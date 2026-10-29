@@ -1,8 +1,13 @@
 # frozen_string_literal: true
 
 module Ghwatch
+  # One spinner line for every agent running at once (parallel_review).
   class AgentProgress
     FRAMES = %w[| / - \\].freeze
+    RUNNING = []
+    LOCK = Mutex.new
+
+    attr_reader :label
 
     def initialize(label:, io: $stderr)
       @label = label
@@ -10,7 +15,10 @@ module Ghwatch
       @started_at = Process.clock_gettime(Process::CLOCK_MONOTONIC)
       @frame = 0
       @buffers = {stdout: +"", stderr: +""}
+      LOCK.synchronize { RUNNING << self }
     end
+
+    def elapsed = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - @started_at).to_i
 
     def output(stream, text)
       buffer = @buffers.fetch(stream)
@@ -23,13 +31,14 @@ module Ghwatch
     def tick
       return unless @io.tty?
 
-      elapsed = (Process.clock_gettime(Process::CLOCK_MONOTONIC) - @started_at).to_i
-      @io.print("\r\e[2K#{FRAMES[@frame % FRAMES.length]} #{@label} running (#{elapsed}s)")
+      running = LOCK.synchronize { RUNNING.map { |progress| "#{progress.label} running (#{progress.elapsed}s)" } }
+      @io.print("\r\e[2K#{FRAMES[@frame % FRAMES.length]} #{running.join(" · ")}")
       @io.flush
       @frame += 1
     end
 
     def finish
+      LOCK.synchronize { RUNNING.delete(self) }
       @buffers.each do |stream, buffer|
         write_line(stream, buffer) unless buffer.empty?
         buffer.clear

@@ -2,6 +2,8 @@
 poll_interval = "10m"
 retry_after = "10m"
 max_workers = 2
+# Run reviews, merges and finalizing on a second lane beside the worker.
+parallel_review = false
 candidate_limit = 20
 worktree_root = ".worktrees"
 # Run in the task worktree when it starts waiting for a person; "" disables it.

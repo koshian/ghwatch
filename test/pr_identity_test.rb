@@ -69,6 +69,8 @@ class PrIdentityTest < Minitest::Test
     def save_task(task)
       task
     end
+
+    def task(id) = tasks.find { |task| task.id == id }
   end
 
   class Action
