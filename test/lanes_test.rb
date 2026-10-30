@@ -130,6 +130,20 @@ class LanesTest < Minitest::Test
     assert runner.join(5), "the scheduler stops once the lanes have"
   end
 
+  def test_a_pr_the_worker_opened_but_has_not_saved_is_not_taken_for_someone_elses
+    github = OpenStruct.new(open_pull_requests: [{"number" => 776, "headRefName" => "issue-1"}, {"number" => 777, "headRefName" => "other"}])
+    def github.pull_request(number) = {"number" => number}
+    def github.pr_signature(pull_request) = "sig"
+    def github.viewer_login = "koshian"
+    state = State.new([@issue, @review])
+    saved = []
+    state.define_singleton_method(:task_for_pr) { |number| nil }
+    state.define_singleton_method(:save_task) { |task| saved << task.pr_number }
+    Ghwatch::ReviewIntake.new(config: OpenStruct.new(review_all_open_prs?: true), state: state, github: github,
+      log: Ghwatch::Log.new(StringIO.new)).discover
+    assert_equal [777], saved
+  end
+
   def test_the_looks_while_agents_run_check_every_label_once_a_poll
     engine = Object.new
     engine.define_singleton_method(:reconcile_all) {}

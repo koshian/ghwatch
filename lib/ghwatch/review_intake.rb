@@ -15,6 +15,7 @@ module Ghwatch
       @github.open_pull_requests.each do |summary|
         next if summary["isDraft"]
         next if @state.task_for_pr(summary["number"])
+        next if opened_by_a_task?(summary)
         next if handed_off?(summary)
 
         pull_request = @github.pull_request(summary["number"])
@@ -27,6 +28,12 @@ module Ghwatch
     end
 
     private
+
+    # A worker opens its PR before it saves the number; with parallel_review
+    # this look can come between the two.
+    def opened_by_a_task?(summary)
+      @state.tasks.any? { |task| !task.done? && task.issue_number && task.branch == summary["headRefName"] }
+    end
 
     # Marked for someone else, or the PR of a task that was handed off.
     def handed_off?(summary)
