@@ -129,4 +129,23 @@ class LanesTest < Minitest::Test
     scheduler.instance_variable_get(:@wakeup_writer).write(".")
     assert runner.join(5), "the scheduler stops once the lanes have"
   end
+
+  def test_the_looks_while_agents_run_check_every_label_once_a_poll
+    engine = Object.new
+    engine.define_singleton_method(:reconcile_all) {}
+    intake = Object.new
+    intake.define_singleton_method(:discover) {}
+    labels = Object.new
+    syncs = []
+    labels.define_singleton_method(:sync_all) { syncs << :all }
+    config = OpenStruct.new(poll_interval: 600, reload_if_changed!: false)
+    scheduler = Ghwatch::Scheduler.new(task_engine: engine, review_intake: intake, issue_triage: nil, config: config,
+      github: nil, status_labels: labels, log: Ghwatch::Log.new(StringIO.new))
+    3.times { scheduler.send(:look_at_github) }
+    assert_equal 1, syncs.size
+
+    scheduler.instance_variable_set(:@labels_synced_at, Time.now - 600)
+    scheduler.send(:look_at_github)
+    assert_equal 2, syncs.size
+  end
 end

@@ -96,11 +96,14 @@ module Ghwatch
       @log.info("ghwatch stopped")
     end
 
+    # Every label is checked once a poll; the looks between only follow the
+    # tasks, whose changes label themselves. Checking them all every minute
+    # uses up GitHub's rate limit.
     def look_at_github
       @log.info("checking GitHub")
       [
         -> { reload_config_if_changed },
-        -> { @status_labels&.sync_all },
+        -> { sync_labels_once_a_poll },
         -> { @task_engine.reconcile_all },
         -> { @review_intake.discover }
       ].each do |step|
@@ -110,6 +113,13 @@ module Ghwatch
       end
     rescue => e
       @log.error("looking at GitHub failed: #{e.class}: #{e.message}")
+    end
+
+    def sync_labels_once_a_poll
+      return if @labels_synced_at && Time.now - @labels_synced_at < @config.poll_interval
+
+      @labels_synced_at = Time.now
+      @status_labels&.sync_all
     end
 
     # The worker lane looks for issues once it has run what was due, at most
