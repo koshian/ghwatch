@@ -10,12 +10,14 @@ module Ghwatch
     attr_reader :name
 
     # after runs when the lane has run what was due, with the number of
-    # actions it ran.
-    def initialize(name:, task_engine:, log: Log.new, after: nil)
+    # actions it ran, and returns whether it did some work itself. idle runs
+    # once the lane is no longer busy after doing some work.
+    def initialize(name:, task_engine:, log: Log.new, after: nil, idle: nil)
       @name = name
       @task_engine = task_engine
       @log = log
       @after = after
+      @idle = idle
       @busy = false
       @wakeup_reader, @wakeup_writer = IO.pipe
     end
@@ -44,12 +46,21 @@ module Ghwatch
     def work
       @busy = true
       actions = @task_engine.run_due(lane: @name, stop_requested: -> { @stopping })
-      @after&.call(actions) unless @stopping
+      worked = actions.positive?
+      worked = @after.call(actions) || worked if @after && !@stopping
     rescue => e
       @log.error("#{@name} lane failed: #{e.class}: #{e.message}")
     ensure
       @busy = false
-      wait unless @stopping || @task_engine.due?(lane: @name)
+      due = !@stopping && @task_engine.due?(lane: @name)
+      report_idle if worked && !@stopping && !due
+      wait unless @stopping || due
+    end
+
+    def report_idle
+      @idle&.call
+    rescue => e
+      @log.warn("could not report the next check: #{e.message}")
     end
 
     def wait

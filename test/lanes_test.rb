@@ -165,6 +165,28 @@ class LanesTest < Minitest::Test
     assert_equal 2, triaged.size
   end
 
+  def test_when_both_lanes_have_nothing_left_the_next_check_is_logged
+    out = StringIO.new
+    engine = Object.new
+    engine.define_singleton_method(:due?) { |lane: nil| false }
+    engine.define_singleton_method(:next_retry_at) { |lane: nil| nil }
+    scheduler = Ghwatch::Scheduler.new(task_engine: engine, review_intake: nil, issue_triage: nil,
+      config: OpenStruct.new(poll_interval: 600), github: nil, log: Ghwatch::Log.new(out))
+    next_check = Time.now + 600
+    scheduler.instance_variable_set(:@next_check_at, next_check)
+    busy = OpenStruct.new(busy?: true)
+    idle = OpenStruct.new(busy?: false)
+
+    scheduler.send(:report_idle, [busy, idle])
+    assert_empty out.string, "nothing is said while a lane still works"
+    scheduler.send(:report_idle, [idle, idle])
+    assert_includes out.string, "nothing to run now; next check at #{next_check.iso8601}"
+
+    engine.define_singleton_method(:next_retry_at) { |lane: nil| (next_check - 300).to_i }
+    scheduler.send(:report_idle, [idle, idle])
+    assert_includes out.string, "next check at #{Time.at((next_check - 300).to_i).iso8601}", "a task due sooner comes first"
+  end
+
   def test_the_looks_while_agents_run_check_every_label_once_a_poll
     engine = Object.new
     engine.define_singleton_method(:reconcile_all) {}

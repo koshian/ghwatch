@@ -76,9 +76,11 @@ module Ghwatch
     # threads of their own. This thread only looks at GitHub, every
     # RECHECK_AFTER while an agent runs, and wakes them.
     def run_lanes
-      worker = Lane.new(name: :worker, task_engine: @task_engine, log: @log, after: ->(actions) { triage_after(actions) })
-      review = Lane.new(name: :review, task_engine: @task_engine, log: @log, after: ->(actions) { triage_soon(actions, worker) })
-      lanes = [worker, review]
+      lanes = []
+      idle = -> { report_idle(lanes) }
+      worker = Lane.new(name: :worker, task_engine: @task_engine, log: @log, after: ->(actions) { triage_after(actions) }, idle: idle)
+      review = Lane.new(name: :review, task_engine: @task_engine, log: @log, after: ->(actions) { triage_soon(actions, worker) }, idle: idle)
+      lanes.push(worker, review)
       lanes.each(&:start)
       while @running && !updated?
         look_at_github
@@ -130,6 +132,7 @@ module Ghwatch
       @triage_wanted = false
       @triaged_at = Time.now
       @issue_triage.run
+      true
     end
 
     # A review lane action can leave an issue with work to pick up: a merged
@@ -140,6 +143,16 @@ module Ghwatch
 
       @triage_wanted = true
       worker.wake
+      false
+    end
+
+    # Once both lanes have nothing left to run, say when ghwatch looks again,
+    # so the last line does not leave it looking stuck.
+    def report_idle(lanes)
+      return if lanes.any?(&:busy?) || @next_check_at.nil? || @task_engine.due?
+
+      at = [@next_check_at, @task_engine.next_retry_at&.then { |time| Time.at(time) }].compact.min
+      @log.info("nothing to run now; next check at #{at.iso8601}")
     end
 
     # A long cycle may have missed new PRs, replies and pushes made while
@@ -191,8 +204,9 @@ module Ghwatch
         retry_delay = [retry_at - Time.now.to_i, 1].max
         seconds = [seconds, retry_delay].min
       end
-      @log.info("waiting until #{(Time.now + seconds).iso8601} for the next check (#{seconds}s)")
       deadline = Time.now + seconds
+      @next_check_at = deadline
+      @log.info("waiting until #{deadline.iso8601} for the next check (#{seconds}s)")
       checking = @self_update&.enabled?
       while @running && (remaining = deadline - Time.now) > 0
         break if IO.select([@wakeup_reader], nil, nil, checking ? [remaining, UPDATE_CHECK_INTERVAL].min : remaining)
