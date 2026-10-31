@@ -76,10 +76,9 @@ module Ghwatch
     # threads of their own. This thread only looks at GitHub, every
     # RECHECK_AFTER while an agent runs, and wakes them.
     def run_lanes
-      lanes = [
-        Lane.new(name: :worker, task_engine: @task_engine, log: @log, after: ->(actions) { triage_after(actions) }),
-        Lane.new(name: :review, task_engine: @task_engine, log: @log)
-      ]
+      worker = Lane.new(name: :worker, task_engine: @task_engine, log: @log, after: ->(actions) { triage_after(actions) })
+      review = Lane.new(name: :review, task_engine: @task_engine, log: @log, after: ->(actions) { triage_soon(actions, worker) })
+      lanes = [worker, review]
       lanes.each(&:start)
       while @running && !updated?
         look_at_github
@@ -123,12 +122,24 @@ module Ghwatch
     end
 
     # The worker lane looks for issues once it has run what was due, at most
-    # once a poll unless it just finished some work.
+    # once a poll unless either lane just finished some work.
     def triage_after(actions)
-      return unless actions.positive? || @triaged_at.nil? || Time.now - @triaged_at >= @config.poll_interval
+      wanted = @triage_wanted
+      return unless actions.positive? || wanted || @triaged_at.nil? || Time.now - @triaged_at >= @config.poll_interval
 
+      @triage_wanted = false
       @triaged_at = Time.now
       @issue_triage.run
+    end
+
+    # A review lane action can leave an issue with work to pick up: a merged
+    # PR of an issue that needs more of them waits for triage to judge it
+    # ready again.
+    def triage_soon(actions, worker)
+      return unless actions.positive?
+
+      @triage_wanted = true
+      worker.wake
     end
 
     # A long cycle may have missed new PRs, replies and pushes made while

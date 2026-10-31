@@ -144,6 +144,27 @@ class LanesTest < Minitest::Test
     assert_equal [777], saved
   end
 
+  def test_work_done_on_the_review_lane_has_the_worker_lane_triage_soon
+    triaged = []
+    triage = Object.new
+    triage.define_singleton_method(:run) { triaged << :run }
+    scheduler = Ghwatch::Scheduler.new(task_engine: nil, review_intake: nil, issue_triage: triage,
+      config: OpenStruct.new(poll_interval: 600), github: nil, log: Ghwatch::Log.new(StringIO.new))
+    scheduler.send(:triage_after, 0)
+    scheduler.send(:triage_after, 0)
+    assert_equal 1, triaged.size, "an idle worker lane triages once a poll"
+
+    woken = []
+    worker = Object.new
+    worker.define_singleton_method(:wake) { woken << :wake }
+    scheduler.send(:triage_soon, 1, worker)
+    assert_equal [:wake], woken
+    scheduler.send(:triage_after, 0)
+    assert_equal 2, triaged.size, "a finalized merge is triaged without waiting out the poll"
+    scheduler.send(:triage_after, 0)
+    assert_equal 2, triaged.size
+  end
+
   def test_the_looks_while_agents_run_check_every_label_once_a_poll
     engine = Object.new
     engine.define_singleton_method(:reconcile_all) {}
