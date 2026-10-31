@@ -146,13 +146,14 @@ module Ghwatch
       false
     end
 
-    # Once both lanes have nothing left to run, say when ghwatch looks again,
-    # so the last line does not leave it looking stuck.
+    # Once both lanes have nothing left to run, say what ghwatch waits for
+    # and when it looks at each, so the last line does not leave it looking
+    # stuck.
     def report_idle(lanes)
       return if lanes.any?(&:busy?) || @next_check_at.nil? || @task_engine.due?
 
-      at = [@next_check_at, @task_engine.next_retry_at&.then { |time| Time.at(time) }].compact.min
-      @log.info("nothing to run now; next check at #{at.iso8601}")
+      waits = @task_engine.upcoming + [[@next_check_at.to_i, "GitHub"]]
+      @log.info("idle; next: #{waits.sort.map { |time, what| "#{what} #{Time.at(time).strftime("%H:%M")}" }.join(", ")}")
     end
 
     # A long cycle may have missed new PRs, replies and pushes made while

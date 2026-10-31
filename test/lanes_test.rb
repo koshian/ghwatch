@@ -165,26 +165,30 @@ class LanesTest < Minitest::Test
     assert_equal 2, triaged.size
   end
 
-  def test_when_both_lanes_have_nothing_left_the_next_check_is_logged
+  def test_when_both_lanes_have_nothing_left_what_they_wait_for_is_logged
     out = StringIO.new
-    engine = Object.new
-    engine.define_singleton_method(:due?) { |lane: nil| false }
-    engine.define_singleton_method(:next_retry_at) { |lane: nil| nil }
-    scheduler = Ghwatch::Scheduler.new(task_engine: engine, review_intake: nil, issue_triage: nil,
+    now = Time.now
+    merge = Ghwatch::Task.for_issue(826, branch: "b", worktree: nil)
+    merge.state = "ready_to_merge"
+    merge.retry_at = (now + 120).to_i
+    build = Ghwatch::Task.for_issue(795, branch: "c", worktree: nil)
+    build.state = "waiting_for_test_build"
+    build.metadata["test_build"] = {"check_at" => (now + 1200).to_i}
+    person = Ghwatch::Task.for_issue(338, branch: "d", worktree: nil)
+    person.state = "waiting_for_human_test"
+    person.retry_at = (now - 3600).to_i
+    @engine.instance_variable_set(:@state, State.new([merge, build, person]))
+    scheduler = Ghwatch::Scheduler.new(task_engine: @engine, review_intake: nil, issue_triage: nil,
       config: OpenStruct.new(poll_interval: 600), github: nil, log: Ghwatch::Log.new(out))
-    next_check = Time.now + 600
-    scheduler.instance_variable_set(:@next_check_at, next_check)
+    scheduler.instance_variable_set(:@next_check_at, now + 600)
     busy = OpenStruct.new(busy?: true)
     idle = OpenStruct.new(busy?: false)
 
     scheduler.send(:report_idle, [busy, idle])
     assert_empty out.string, "nothing is said while a lane still works"
     scheduler.send(:report_idle, [idle, idle])
-    assert_includes out.string, "nothing to run now; next check at #{next_check.iso8601}"
-
-    engine.define_singleton_method(:next_retry_at) { |lane: nil| (next_check - 300).to_i }
-    scheduler.send(:report_idle, [idle, idle])
-    assert_includes out.string, "next check at #{Time.at((next_check - 300).to_i).iso8601}", "a task due sooner comes first"
+    at = ->(seconds) { Time.at((now + seconds).to_i).strftime("%H:%M") }
+    assert_includes out.string, "idle; next: issue-826 ready to merge #{at[120]}, GitHub #{at[600]}, issue-795 test build #{at[1200]}\n"
   end
 
   def test_the_looks_while_agents_run_check_every_label_once_a_poll

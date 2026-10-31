@@ -52,6 +52,19 @@ module Ghwatch
       active_tasks.select { |task| in_lane?(task, lane) }.reject(&:waiting_for_human?).filter_map(&:retry_at).min
     end
 
+    # When each task not waiting for a person is looked at next, as [time,
+    # what] pairs, soonest first: a retry or a check by its state, a test
+    # build by the watcher's next look.
+    def upcoming
+      active_tasks.reject(&:waiting_for_human?).filter_map do |task|
+        if (check_at = task.metadata.dig("test_build", "check_at"))
+          [check_at.to_i, "#{task.id} test build"]
+        elsif task.retry_at
+          [task.retry_at, "#{task.id} #{task.state.tr("_", " ")}"]
+        end
+      end.sort
+    end
+
     def due?(lane: nil)
       active_tasks.any? { |task| in_lane?(task, lane) && action_due?(task) }
     end
