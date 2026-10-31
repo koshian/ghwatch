@@ -220,6 +220,10 @@ module Ghwatch
         form would do: dropping it, narrowing the requirement, or doing it in one place. If one
         would, ask for that simplification instead of patching the mechanism's holes. If an
         earlier finding went too far, say so; you may withdraw it.
+        A check that turns away stale results or other state (a generation, a revision, a
+        size limit, syncing a copy) must be keyed by the thing it guards (this connection,
+        this channel, this batch). A shared counter or window is coarser and catches
+        unrelated work; ask for the right key, or for the copy to go so nothing needs syncing.
 
         In body, sort what is wrong or risky into three groups: blocking (caused by this PR,
         or a completion condition not met); existing problems and out of scope; and

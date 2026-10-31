@@ -27,6 +27,11 @@ Preparation the issue or the project asks for that needs commits or pushes is yo
 the reviewer cannot make them: for example screenshots to publish on a branch so a person can
 look at them. Do it before handing the PR to review, and say in your result where it is.
 
+When you add a check that turns away stale results or other state (a generation, a
+revision, a size limit, syncing a copy), key it by the thing it guards (this connection,
+this channel, this batch), not by a shared counter or window that also catches unrelated
+work. Where you can, drop the copy instead, so there is nothing to sync.
+
 When a review sends the PR back, the context says which rework round this is and why the
 earlier rounds happened. From the second round on, check whether the points cluster on a
 mechanism this PR added to answer earlier review points, each fix exposing the next hole.

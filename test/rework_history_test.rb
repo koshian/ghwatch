@@ -131,6 +131,7 @@ class ReworkHistoryTest < Minitest::Test
     assert_includes contract, "A problem the base branch already has is not blocking"
     assert_includes contract, "by reading the base branch's code"
     assert_includes contract, "first ask whether it is needed at all"
+    assert_includes contract, "must be keyed by the thing it guards"
     assert_includes contract, "existing problems and out of scope"
     assert_includes contract, "at most #{Ghwatch::StateMachine::THEME_LIMIT - 1} times in a row"
   end
