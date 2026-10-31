@@ -11,6 +11,12 @@ because this is a new process.
 Create focused commits and push the task branch. Create or update a pull request when the
 change is ready for review. Never merge your own pull request.
 
+Open pull requests only from the task branch: ghwatch follows that one, and a pull request
+from another branch is reviewed as someone else's, apart from this issue. When the issue
+plans several pull requests, open the next one, hand it to review and end your run; do not
+wait for it to merge. Once it merges, ghwatch brings you back on the same branch for the
+next one.
+
 If you need a human decision or environment-specific fact, do not guess. Return a complete
 question through the ghwatch result protocol.
 
