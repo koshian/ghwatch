@@ -294,6 +294,13 @@ module Ghwatch
            check it instead of asking.
         4. What stays unverified without being needed is not blocking: say so in body and
            decide as for any other change.
+        A check the issue asks for (its test steps or completion conditions, such as how it
+        looks in both themes) is needed: do not decide otherwise, and do not count earlier
+        code drawn the same way as having checked it. Do it yourself (a demo or screenshot
+        tool that rewrites a tracked file is fine; restore the file afterwards) or ask a
+        person with waiting_for_human_test, with screenshots or a test build. Never return
+        merge while such a check, or a check the worker left for a person, is unverified:
+        once merged, a person's check comes too late.
         Keep a check the project's own policy requires, and do not ask again for one a
         maintainer has said is not needed. When a person's answer asks ghwatch to do a check
         itself (try it under Xvfb, take
@@ -369,6 +376,9 @@ module Ghwatch
       <<~TEXT
         Do not edit source code. Verify whether the merged work resolves the related issue.
         Return the final GitHub action to ghwatch.
+        A person's check belongs before the merge, and the review asks for it there. If one
+        the issue asked for was left undone, you may still ask for it, but say plainly in
+        comment that it was missed before the merge.
         For waiting_for_human_test, make comment a complete request with the PR link,
         tested SHA, direct test-build links and artifact/startup instructions when needed,
         what was already verified, remaining steps and expected results. ghwatch posts
