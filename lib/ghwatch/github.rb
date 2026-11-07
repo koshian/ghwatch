@@ -62,6 +62,14 @@ module Ghwatch
       !assignees.empty? && !(assignees - [viewer.call]).empty?
     end
 
+    # Whether an issue is planned for a milestone other than the active ones.
+    # An issue without a milestone is not planned for later.
+    def self.later_milestone?(issue, active:)
+      active = Array(active)
+      title = issue["milestone"]&.fetch("title", nil)
+      !active.empty? && !title.nil? && !active.include?(title)
+    end
+
     def viewer_login
       @viewer_login ||= gh_api("user").fetch("login")
     end
@@ -69,7 +77,7 @@ module Ghwatch
     def open_issues(limit: 100)
       gh_json(
         "issue", "list", "--state", "open", "--limit", limit.to_s,
-        "--json", "number,title,updatedAt,url,labels,assignees"
+        "--json", "number,title,updatedAt,url,labels,assignees,milestone"
       ).sort_by { |issue| issue.fetch("number") }
     end
 

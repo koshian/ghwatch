@@ -129,6 +129,11 @@ module Ghwatch
       Duration.seconds(triage.fetch("reassess_after", "1d"))
     end
 
+    # When set, issues in any other milestone are not triaged.
+    def active_milestones
+      triage.fetch("active_milestones", [])
+    end
+
     def screening
       triage.fetch("screening", {})
     end
@@ -241,6 +246,9 @@ module Ghwatch
       raise Error, "[project].human_wait_cleanup must be a string" unless project.fetch("human_wait_cleanup", "").is_a?(String)
       raise Error, "[project].harmful_issues must be discussion or skip" unless %w[discussion skip].include?(harmful_issues)
       reassess_after
+      unless active_milestones.is_a?(Array) && active_milestones.all?(String)
+        raise Error, "[triage].active_milestones must be a list of milestone titles"
+      end
       confidence = screening.fetch("min_confidence", 0.8)
       raise Error, "[triage.screening].min_confidence must be between 0 and 1" unless confidence.is_a?(Numeric) && confidence.between?(0, 1)
       raise Error, "[github].screenshot_branch_prefix must be a string" unless screenshot_branch_prefix.is_a?(String)

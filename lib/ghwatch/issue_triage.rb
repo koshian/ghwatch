@@ -143,7 +143,8 @@ module Ghwatch
     def candidate_issues
       active_issue_numbers = @state.tasks.reject(&:done?).filter_map(&:issue_number)
       candidates = @github.open_issues.reject do |issue|
-        active_issue_numbers.include?(issue["number"]) || Github.hands_off?(issue, viewer: -> { @github.viewer_login })
+        active_issue_numbers.include?(issue["number"]) || Github.hands_off?(issue, viewer: -> { @github.viewer_login }) ||
+          Github.later_milestone?(issue, active: @config.active_milestones)
       end
 
       candidates.first(@config.candidate_limit)

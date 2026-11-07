@@ -37,6 +37,9 @@ file_found_issues = true
 # Issues unchanged since their last assessment are not judged again until
 # this long has passed; deferred ones are also judged again after a merge.
 reassess_after = "1d"
+# When set, issues in any other milestone are left for later: they are not
+# triaged or started. Issues without a milestone are triaged as usual.
+# active_milestones = ["1.1.0"]
 
 [triage.screening]
 # A decision model (TypeSafe Jev) settles issues that need no action now

@@ -41,6 +41,8 @@ module Ghwatch
       @labelled_prs = {}
       # Issues marked for someone else, as the last issue listing showed.
       @handed_off = {}
+      # Issues in a milestone that is not active, from the same listing.
+      @later = {}
     end
 
     def sync_all
@@ -48,9 +50,11 @@ module Ghwatch
 
       @synced.clear
       @handed_off.clear
+      @later.clear
       tasks = @state.tasks
       open_issues.each do |issue|
         @handed_off[issue["number"]] = Github.hands_off?(issue, viewer: -> { @github.viewer_login })
+        @later[issue["number"]] = Github.later_milestone?(issue, active: @config.active_milestones)
         sync_issue_number(issue["number"], current: issue["labels"])
       end
       tasks.filter_map(&:issue_number).uniq.each { |number| sync_issue_number(number) }
@@ -104,6 +108,7 @@ module Ghwatch
       active = tasks.reverse.find { |task| !task.done? }
       return task_label(active.state) if active
       return [nil] if @handed_off[number]
+      return TRIAGE_LABELS["deferred"] if @later[number]
 
       last = tasks.last
       assessment = @state.assessment(number)

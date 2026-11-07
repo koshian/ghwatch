@@ -157,7 +157,8 @@ active task it shows the triage assessment (or the task's end, whichever is newe
 `ghwatch:ready` (starts when a worker is free), `ghwatch:blocked`,
 `ghwatch:needs-discussion`, `ghwatch:deferred`, `ghwatch:followup`, `ghwatch:skip`, or
 `ghwatch:untriaged` when triage has not judged it yet (for example beyond
-`project.candidate_limit`). `ghwatch status` shows the reasons.
+`project.candidate_limit`). `ghwatch status` shows the reasons. An Issue left for a later
+milestone (see `triage.active_milestones`) shows `ghwatch:deferred`.
 
 To give an Issue or PR to someone else, assign it to them (any account other than the one
 ghwatch works as) or label it `ghwatch:hands-off`. ghwatch then leaves it alone: triage
@@ -590,6 +591,13 @@ up on the next idle poll. It runs in up to three stages and skips work it has al
 3. The triage role (an LLM, with model fallbacks as for any role) judges the rest. It is
    given the same states of what each issue mentions as `#N`.
 
+To plan work by milestone, list the ones to work on now in `triage.active_milestones`. An
+Issue in any other milestone is left for later: triage does not read it, so it never starts,
+and it carries `ghwatch:deferred`. Issues without a milestone are triaged as usual, and with
+the setting absent milestones do not matter. Moving an Issue to an active milestone, or
+adding its milestone to the list, makes it a triage candidate again. This decides only what
+starts: a task already running on an Issue goes on, whatever its milestone becomes.
+
 Triage asks whether an issue should be done before whether it can be. Proposals of
 doubtful value or outside the project's goals, requests for behavior that could harm users
 or third parties (hidden data collection, weakened security, malware-like behavior), and
@@ -662,6 +670,10 @@ screenshot_branch_prefix = "ghwatch-assets/"
 require_green_checks = true
 checks_poll_interval = "10m"
 file_found_issues = true
+
+[triage]
+reassess_after = "1d"
+active_milestones = ["1.1.0"]
 ```
 
 `human_language` controls human-facing GitHub text for every role, including PR titles
