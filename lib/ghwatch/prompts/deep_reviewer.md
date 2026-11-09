@@ -38,3 +38,6 @@ note, for each angle above, what was checked and how, and the verification perfo
 When the PR went back to the worker before, the context lists the earlier rounds. Separate
 findings about the PR's main subject from findings about mechanisms added while answering
 earlier rounds, and weigh both as the result instructions describe.
+
+When the context names the commit this role last reviewed, this review covers what came after
+it, as the context describes, rather than the whole PR again.

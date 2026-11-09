@@ -486,7 +486,11 @@ the meantime ends the wait and the PR is reviewed again.
 Every review pass completes the code review, even when pending CI or test preparation
 already blocks merge, and reports all blocking problems together. Re-reviews first check
 the previously requested changes and the changes since, raising new findings in unchanged
-code only for real defects within the issue's scope. Only a defect or regression the PR
+code only for real defects within the issue's scope. Once a role has reviewed a PR, ghwatch
+tells it the commit it reviewed, and its later reviews read and verify what came after that
+commit instead of the whole PR, unless the changes rework the design or a person asks. A
+normal review does not count for the deep reviewer, which sees the whole PR at least once.
+Only a defect or regression the PR
 introduces or worsens, or an unmet completion condition of the issue, blocks a PR. Problems
 the base branch already has, and rare failure paths outside the issue that lose no data in
 ordinary use, are filed as separate issues and linked in the review (`file_found_issues`,

@@ -71,7 +71,7 @@ module Ghwatch
       TEXT
     end
 
-    def reviewer(task:, issue:, pull_request:)
+    def reviewer(task:, issue:, pull_request:, role: "reviewer")
       <<~TEXT
         Review the pull request as an independent reviewer. Read AGENTS.md and relevant project
         specifications. Inspect the current PR diff, CI/check state, review discussion, and the
@@ -109,6 +109,7 @@ module Ghwatch
         change is resolved, then review what changed since for regressions. Raise new findings
         in code that did not change only when they are real defects within the issue's scope;
         put optional improvements in a non-blocking note.
+        #{changes_since_review(task, pull_request, role)}
         You may start the project's CI or test-build workflows for this PR commit yourself,
         for example with gh workflow run on the PR branch; that is not a source change. When
         human testing needs a test build of the current commit, use one already finished for
@@ -177,6 +178,33 @@ module Ghwatch
     end
 
     private
+
+    # A review covers the whole PR once; the next ones cover what came after
+    # it, so each round does not repeat the reading and verification.
+    def changes_since_review(task, pull_request, role)
+      heads = task.metadata["reviewed_heads"]
+      return "" unless heads.is_a?(Hash) && heads["pr"] == task.pr_number
+
+      reviewed = heads[role]
+      head = pull_request["headRefOid"]
+      return "" if reviewed.nil? || reviewed == head
+
+      <<~TEXT
+        This role last reviewed this PR at commit #{reviewed}, and that review covered the whole
+        PR. This review covers what came after it, not the whole PR again:
+
+        - See what changed with `git log --first-parent #{reviewed}..#{head}` and
+          `git diff #{reviewed} #{head}`. A merge of the base branch brings in changes that are
+          not this PR's; leave those out.
+        - Read the code those changes affect, such as callers and shared state, as far as needed
+          to judge them. Review the whole PR again only when the changes rework its design or a
+          person asks for it, and say why.
+        - Run the builds, tests and GUI checks those changes can affect. Do not repeat scenarios
+          they cannot affect; refer to the earlier review for those results.
+        - Report the angles you are asked to evaluate for these changes.
+        - If #{reviewed} is no longer in the PR's history, review the whole PR.
+      TEXT
+    end
 
     def review_only_note(task)
       return "" unless task.metadata["review_only"]

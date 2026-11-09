@@ -39,7 +39,7 @@ module Ghwatch
         return if skip_repeat_review(task, snapshot, pull_request)
 
         workspace = review_workspace(task, pull_request) or return
-        context = @context_builder.reviewer(task: task, issue: issue, pull_request: pull_request)
+        context = @context_builder.reviewer(task: task, issue: issue, pull_request: pull_request, role: role)
         outcome = begin
           @roles.run(role, context: context, cwd: workspace, task: task)
         ensure
@@ -268,6 +268,7 @@ module Ghwatch
         task.metadata.delete("commented_review")
 
         role = outcome.respond_to?(:role) ? (outcome.role || "reviewer") : "reviewer"
+        remember_reviewed_head(task, pull_request, role) unless data["status"] == "retry"
         case data["status"]
         when "merge"
           post_review_body(task, data["body"], outcome, kind: "review-ok")
@@ -299,6 +300,18 @@ module Ghwatch
           raise "unknown review status #{data["status"].inspect}"
         end
         decide(task, role, data["status"], rework_context(data, "review"))
+      end
+
+      # Where the next review of this PR can start from. A deep review also
+      # counts for the normal reviewer, but not the other way round: the deep
+      # reviewer sees the whole PR at least once.
+      def remember_reviewed_head(task, pull_request, role)
+        head = pull_request["headRefOid"]
+        return unless head
+
+        known = task.metadata["reviewed_heads"]
+        heads = (known.is_a?(Hash) && known["pr"] == task.pr_number) ? known : {"pr" => task.pr_number}
+        task.metadata["reviewed_heads"] = heads.merge("reviewer" => head, role => head)
       end
 
       # What the worker is sent back for, kept for later rounds and for the
