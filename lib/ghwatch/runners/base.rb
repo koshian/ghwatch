@@ -57,12 +57,14 @@ module Ghwatch
 
       private
 
+      QUOTA_PATTERNS = ["usage limit", "weekly limit", "session limit", "5-hour limit", "quota", "no weighted tokens left", "no tokens left"].freeze
+
       def classify(result)
         return "timeout" if result.timed_out
         return nil if result.success? && valid_result?(result.stdout)
 
         text = result.text.downcase
-        return "quota" if ["usage limit", "usage limits", "weekly limit", "session limit", "quota", "no weighted tokens left", "no tokens left"].any? { |pattern| text.include?(pattern) }
+        return "quota" if QUOTA_PATTERNS.any? { |pattern| text.include?(pattern) } || text.match?(/hit your [\w -]*limit/)
         return "capacity" if capacity_patterns.any? { |pattern| text.include?(pattern.downcase) }
         return nil if result.success?
 

@@ -38,9 +38,11 @@ class RunnerResultTest < Minitest::Test
     assert_equal "quota", invoke("quota exceeded\nGHWATCH_RESULT_BEGIN\ninvalid JSON\nGHWATCH_RESULT_END").error_kind
   end
 
-  def test_claude_weekly_and_session_limits_fall_back_to_luna
+  def test_claude_weekly_session_and_5_hour_limits_fall_back_to_luna
     ["You've hit your weekly limit · resets 6am (Asia/Tokyo)",
-      "You've hit your session limit · resets 7:50pm (Asia/Tokyo)"].each do |message|
+      "You've hit your session limit · resets 7:50pm (Asia/Tokyo)",
+      "You've hit your 5-hour limit · resets 4:10pm (Asia/Tokyo)",
+      "You've hit your daily limit · resets 9am (Asia/Tokyo)"].each do |message|
       [0, 1].each do |exit_code|
         [false, true].each do |stderr|
           command = Minitest::Mock.new
